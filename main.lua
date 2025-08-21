@@ -1,11 +1,13 @@
 --[[
-  ⚡ Premium Hub v3 — Speed • Fly • Light • ESP (simple) • TP • NoClip • Infinite Jump
+  ⚡ Premium Hub v3 — Speed • Fly • Light • ESP (box+name+distance) • TP • NoClip • Infinite Jump
   Ouvrir/Fermer l'UI : "$" (Shift+4) • F2 • Insert • RightCtrl
 
-  Modifs demandées:
-   - FLY FIX: sortie de fly propre -> plus bloqué au sol (reset states/velocities/collisions/controls)
-   - ESP SIMPLE: un seul toggle + affiche uniquement le pseudo (DisplayName). Pas de distance, pas de contour.
-   - ESP optimisé (anti-doublons + throttle léger).
+  ESP remis "complet" :
+   - Pseudo + carré (SelectionBox) + distance
+   - Couleurs par rôle (sinon TeamColor, sinon gris)
+   - MAJ live quand rôles/équipes changent
+   - Anti-doublons + throttle 10 Hz
+   - Petit toggle optionnel : afficher @username
 ]]
 
 if _G.__PREMIUM_MENU_V3 then return end
@@ -48,8 +50,9 @@ local S = {
 	-- Light
 	lightOn=false, lightBackup=nil,
 
-	-- ESP (simple)
+	-- ESP (complet)
 	espOn=false, espConn=nil, espAcc=0, espHz=10,
+	espShowUsername=true,         -- << unique option d’ESP demandée
 
 	-- TP
 	tpSelectedUserId=nil, tpSelectedLabel=nil,
@@ -166,7 +169,7 @@ local function speed_disable()
 end
 LP.CharacterAdded:Connect(function() if S.speedOn then task.wait(.3); speed_enable() end end)
 
--- ========= Fly (corrigé) =========
+-- ========= Fly (corrigé / sortie propre) =========
 local function fly_disable()
 	S.flyAlive=false; disconnectAll(S.flyConns)
 	if not S.flyData then return end
@@ -176,38 +179,26 @@ local function fly_disable()
 	local Controls = S.flyData.Controls
 	local collMap = S.flyData.collMap
 
-	-- Supprime moteurs
 	pcall(function() if S.flyData.lv then S.flyData.lv.Enabled=false; S.flyData.lv:Destroy() end end)
 	pcall(function() if S.flyData.att then S.flyData.att:Destroy() end end)
 
-	-- Restaure collisions originales
-	if collMap then
-		for part,can in pairs(collMap) do
-			if part and part.Parent then part.CanCollide = can end
-		end
-	end
+	if collMap then for part,can in pairs(collMap) do if part and part.Parent then part.CanCollide=can end end end
 
-	-- Stop toute vélocité + rotations
 	if hrp then
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
-		-- léger “unstick” vers le haut si le sol colle
-		hrp.CFrame = hrp.CFrame + Vector3.new(0, 0.05, 0)
+		hrp.CFrame = hrp.CFrame + Vector3.new(0,0.05,0)
 	end
 
-	-- Restaure controles + états Humanoid
 	if Controls then pcall(function() Controls:Enable() end) end
 	if hum then
-		hum.AutoRotate = true
-		hum.PlatformStand = false
-		hum.Sit = false
-		-- Séquence d’état pour forcer la reprise
+		hum.AutoRotate=true
+		hum.PlatformStand=false
+		hum.Sit=false
 		pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed) end)
 		pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
-		task.delay(0.05, function()
-			if hum and hum.Parent then
-				pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
-			end
+		task.delay(0.05,function()
+			if hum and hum.Parent then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end) end
 		end)
 	end
 
@@ -219,7 +210,6 @@ local function fly_enable()
 	local char=getChar(); local hrp=char:WaitForChild("HumanoidRootPart"); local hum=char:WaitForChild("Humanoid")
 	S.flyAlive=true
 
-	-- Désactive contrôles par défaut
 	local Controls=nil
 	pcall(function()
 		local ps=LP:WaitForChild("PlayerScripts")
@@ -230,43 +220,21 @@ local function fly_enable()
 		end
 	end)
 
-	-- Mode physique stable
 	hum.AutoRotate=false
 	hum:ChangeState(Enum.HumanoidStateType.Physics)
 	hum.PlatformStand=true
 
-	-- No-collide (sauvegarde puis force OFF)
-	local collMap={}
-	for _,d in ipairs(char:GetDescendants()) do
-		if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end
-	end
-	table.insert(S.flyConns, char.DescendantAdded:Connect(function(d)
-		if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end
-	end))
+	local collMap={}; for _,d in ipairs(char:GetDescendants()) do if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end end
+	table.insert(S.flyConns, char.DescendantAdded:Connect(function(d) if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end end))
 
-	-- Propulsion
 	local att=Instance.new("Attachment"); att.Parent=hrp
 	local lv=Instance.new("LinearVelocity"); lv.Attachment0=att; lv.MaxForce=math.huge; lv.RelativeTo=Enum.ActuatorRelativeTo.World; lv.Parent=hrp
-
 	S.flyData={hrp=hrp,humanoid=hum,lv=lv,att=att,Controls=Controls,collMap=collMap}
 
-	-- Ré-enforce PlatformStand tant que fly actif
-	table.insert(S.flyConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
-		if S.flyAlive and hum.PlatformStand~=true then hum.PlatformStand=true end
-	end))
-	-- Anti-spin
+	table.insert(S.flyConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function() if S.flyAlive and hum.PlatformStand~=true then hum.PlatformStand=true end end))
 	table.insert(S.flyConns, RS.Stepped:Connect(function() if S.flyAlive then hrp.AssemblyAngularVelocity=Vector3.zero end end))
-	-- Garde att/lv en place
-	task.spawn(function()
-		while S.flyAlive and char.Parent do
-			if hum.AutoRotate~=false then hum.AutoRotate=false end
-			if not att.Parent then att.Parent=hrp end
-			if not lv.Parent then lv.Parent=hrp end
-			task.wait(0.05)
-		end
-	end)
+	task.spawn(function() while S.flyAlive and char.Parent do if hum.AutoRotate~=false then hum.AutoRotate=false end if not att.Parent then att.Parent=hrp end if not lv.Parent then lv.Parent=hrp end task.wait(0.05) end end)
 
-	-- Déplacement caméra
 	table.insert(S.flyConns, RS.RenderStepped:Connect(function()
 		if not S.flyAlive then return end
 		local cam=workspace.CurrentCamera; if not cam then return end
@@ -290,7 +258,6 @@ local function fly_enable()
 		lv.VectorVelocity=Vector3.new(horiz.X,vertical,horiz.Z)
 	end))
 
-	-- Cleanup auto si mort
 	table.insert(S.flyConns, hum.Died:Connect(fly_disable))
 end
 
@@ -304,107 +271,173 @@ local function light_disable()
 	if S.lightBackup then Lighting.GlobalShadows=S.lightBackup.GlobalShadows; Lighting.FogEnd=S.lightBackup.FogEnd; Lighting.Brightness=S.lightBackup.Brightness; Lighting.Ambient=S.lightBackup.Ambient end
 end
 
--- ========= ESP (SIMPLE : pseudo uniquement) =========
--- Cache par joueur : un Billboard unique, zéro distance, zéro highlight
-local ESP_REG = {} -- [Player] = {char, bb, name, conns={...}, lastName=""}
+-- ========= ESP (BOX + NAME + DISTANCE) =========
+local ROLE_COLORS = {
+	Murder=Color3.fromRGB(255,60,60), Murderer=Color3.fromRGB(255,60,60),
+	Innocent=Color3.fromRGB(64,128,255),
+	Sheriff=Color3.fromRGB(255,220,0), Detective=Color3.fromRGB(255,220,0),
+}
+local DEFAULT_COLOR = Color3.fromRGB(200,200,200)
+local ESP_MAX_DIST = math.huge  -- pas de limite
 
-local function bestAdornee(char)
-	return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart")
+local function getRole(p,char) local r=p:GetAttribute("Role"); if r==nil and char then r=char:GetAttribute("Role") end; return (typeof(r)=="string") and r or nil end
+local function colorFor(p,char)
+	local role=getRole(p,char); if role and ROLE_COLORS[role] then return ROLE_COLORS[role] end
+	if p.Team and p.Team.TeamColor then return p.Team.TeamColor.Color end
+	return DEFAULT_COLOR
 end
+local function bestAdornee(char) return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart") end
+
+local ESP_REG = {} -- [Player] = {char, box, bb, name, dist, lastName="", lastDist=-1, lastColor=nil, conns={...}}
 
 local function cleanupLegacy(char)
-	local keep=nil
-	for _,d in ipairs(char:GetDescendants()) do
-		if d:IsA("BillboardGui") and d.Name=="ESP_BBG" and d.Parent~=char then d.Parent=char end
-	end
+	-- garde un seul Billboard "ESP_BBG" et un seul SelectionBox "ESP_Box"
+	local keepBB=nil
 	for _,d in ipairs(char:GetChildren()) do
 		if d:IsA("BillboardGui") and d.Name=="ESP_BBG" then
-			if keep then d:Destroy() else keep=d end
+			if keepBB then d:Destroy() else keepBB=d end
 		end
 	end
-	return keep
+	for _,d in ipairs(char:GetChildren()) do
+		if d:IsA("SelectionBox") and d.Name=="ESP_Box" then
+			d:Destroy() -- on reconstruit propre pour contrôler les props
+		end
+	end
+	return keepBB
 end
 
-local function buildForChar(p,char)
+local function makeOrGet(p,char)
 	if not char or p==LP then return end
 	local reg=ESP_REG[p]
-	if not reg then reg={conns={}, lastName=""}; ESP_REG[p]=reg else disconnectAll(reg.conns) end
+	if not reg then reg={conns={}}; ESP_REG[p]=reg else disconnectAll(reg.conns) end
 	reg.char=char
 
-	-- Billboard unique, UNE ligne (pseudo)
+	-- SelectionBox (carré)
+	local box=Instance.new("SelectionBox")
+	box.Name="ESP_Box"
+	box.Adornee=char
+	box.LineThickness=0.02
+	box.SurfaceTransparency=1
+	box.Parent=char
+	reg.box=box
+
+	-- Billboard: pseudo + distance
 	local bb=cleanupLegacy(char)
 	if not bb then
 		bb=Instance.new("BillboardGui"); bb.Name="ESP_BBG"
-		bb.Size=UDim2.new(0, 200, 0, 28)
+		bb.Size=UDim2.new(0, 210, 0, 42)
 		bb.StudsOffset=Vector3.new(0,3,0)
 		bb.AlwaysOnTop=true
 		bb.MaxDistance=5000
 		bb.Parent=char
 		local nameLbl=Instance.new("TextLabel"); nameLbl.Name="Name"
-		nameLbl.BackgroundTransparency=1
-		nameLbl.Size=UDim2.new(1,0,1,0)
-		nameLbl.Font=Enum.Font.GothamBold
-		nameLbl.TextScaled=true
-		nameLbl.TextStrokeTransparency=0.5
-		nameLbl.TextColor3=Color3.fromRGB(235,235,240)
-		nameLbl.Parent=bb
+		nameLbl.BackgroundTransparency=1; nameLbl.Size=UDim2.new(1,0,0.5,0)
+		nameLbl.Font=Enum.Font.GothamBold; nameLbl.TextScaled=true; nameLbl.TextStrokeTransparency=.5; nameLbl.Parent=bb
+		local distLbl=Instance.new("TextLabel"); distLbl.Name="Dist"
+		distLbl.BackgroundTransparency=1; distLbl.Position=UDim2.new(0,0,0.5,0); distLbl.Size=UDim2.new(1,0,0.5,0)
+		distLbl.Font=Enum.Font.Gotham; distLbl.TextScaled=true; distLbl.TextStrokeTransparency=.5; distLbl.Parent=bb
 	end
-	reg.bb=bb
-	reg.name=bb:FindFirstChild("Name")
-	reg.bb.Adornee = bestAdornee(char)
+	reg.bb=bb; reg.name=bb:FindFirstChild("Name"); reg.dist=bb:FindFirstChild("Dist"); reg.lastName=""; reg.lastDist=-1
+	bb.Adornee = bestAdornee(char)
 
+	-- recalc adornee si la tête apparaît après
 	table.insert(reg.conns, char.DescendantAdded:Connect(function(d)
 		if d.Name=="Head" and d:IsA("BasePart") then if reg.bb and reg.bb.Adornee~=d then reg.bb.Adornee=d end end
 	end))
 	table.insert(reg.conns, char.AncestryChanged:Connect(function(_,parent) if parent==nil then disconnectAll(reg.conns) end end))
+
+	return reg
 end
 
 local function ensureBuilt(p)
 	local char=p.Character
 	if not char then return end
 	local reg=ESP_REG[p]
-	if not reg or reg.char~=char or not reg.bb then buildForChar(p,char) end
+	if not reg or reg.char~=char or not reg.bb or not reg.box then
+		makeOrGet(p,char)
+	end
 end
 
-local function esp_update(dt)
+local function colorsEqual(a,b) if not a or not b then return false end; return a.r==b.r and a.g==b.g and a.b==b.b end
+
+local function esp_tick(dt)
 	S.espAcc += dt
 	if S.espAcc < (1 / math.max(1, S.espHz)) then return end
 	S.espAcc = 0
+
+	local myC=LP.Character; if not myC then return end
+	local myHRP=myC:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
 
 	for _,p in ipairs(Players:GetPlayers()) do
 		if p~=LP then
 			ensureBuilt(p)
 			local reg=ESP_REG[p]
 			local char=p.Character
-			if reg and char and reg.bb and reg.name then
-				reg.bb.Enabled = true
-				-- MAJ texte seulement si ça change
-				local wantName = (p.DisplayName and p.DisplayName ~= "") and p.DisplayName or p.Name
-				if reg.lastName ~= wantName then
-					reg.name.Text = wantName
-					reg.lastName = wantName
-				end
-				-- assure une Adornee valide
-				if (not reg.bb.Adornee) or (not reg.bb.Adornee.Parent) then
-					reg.bb.Adornee = bestAdornee(char)
-				end
+			if not (reg and char and reg.box and reg.bb and reg.name and reg.dist) then continue end
+
+			local tHRP=char:FindFirstChild("HumanoidRootPart")
+			local head = char:FindFirstChild("Head") or char:FindFirstChildWhichIsA("BasePart")
+			if not (tHRP and head) then
+				reg.box.Visible=false
+				reg.bb.Enabled=false
+				continue
 			end
+
+			-- distance
+			local dist=(myHRP.Position - tHRP.Position).Magnitude
+			if dist > ESP_MAX_DIST then
+				reg.box.Visible=false
+				reg.bb.Enabled=false
+				continue
+			end
+
+			-- color (role > team > default)
+			local col = colorFor(p,char)
+			if not colorsEqual(reg.lastColor, col) then
+				reg.lastColor = col
+				-- SelectionBox couleurs (selon API)
+				pcall(function() reg.box.LineColor3 = col end)
+				pcall(function() reg.box.Color3 = col end) -- compat plus vieux clients
+				reg.name.TextColor3 = col
+				reg.dist.TextColor3 = col
+			end
+
+			-- texte pseudo
+			local display = (p.DisplayName and p.DisplayName ~= "") and p.DisplayName or p.Name
+			local wantName = S.espShowUsername and (display.." (@"..p.Name..")") or display
+			if reg.lastName ~= wantName then
+				reg.name.Text = wantName
+				reg.lastName = wantName
+			end
+
+			-- distance arrondie
+			local di = (dist >= 0) and math.floor(dist + 0.5) or 0
+			if reg.lastDist ~= di then
+				reg.dist.Text = tostring(di).." studs"
+				reg.lastDist = di
+			end
+
+			-- visibilité + adornee safe
+			reg.box.Visible = true
+			reg.bb.Enabled = true
+			if (not reg.bb.Adornee) or (not reg.bb.Adornee.Parent) then reg.bb.Adornee = bestAdornee(char) end
 		end
 	end
 end
 
 local function esp_enable()
 	if S.espConn then return end
-	for _,pl in ipairs(Players:GetPlayers()) do if pl~=LP and pl.Character then buildForChar(pl, pl.Character) end end
-	S.espConn = RS.Heartbeat:Connect(esp_update)
+	for _,pl in ipairs(Players:GetPlayers()) do if pl~=LP and pl.Character then makeOrGet(pl, pl.Character) end end
+	S.espConn = RS.Heartbeat:Connect(esp_tick)
 	Players.PlayerAdded:Connect(function(p)
-		p.CharacterAdded:Connect(function(c) task.wait(0.2); buildForChar(p,c) end)
-		if p.Character then buildForChar(p,p.Character) end
+		p.CharacterAdded:Connect(function(c) task.wait(0.2); makeOrGet(p,c) end)
+		if p.Character then makeOrGet(p,p.Character) end
 	end)
 end
 local function esp_disable()
 	disconnect(S.espConn); S.espConn=nil
 	for _,reg in pairs(ESP_REG) do
+		if reg.box then reg.box.Visible=false end
 		if reg.bb then reg.bb.Enabled=false end
 	end
 end
@@ -453,7 +486,7 @@ do
 end
 
 -- Fly
-do local Card=makeCard("Fly","Vol fluide (WASD/ZQSD + inclinaison caméra) — FIX sortie propre",100); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("Fly","Vol fluide (WASD/ZQSD + inclinaison caméra) — sortie propre",100); local Toggle,setT=makeToggle(Card,false)
 	Toggle.MouseButton1Click:Connect(function() S.flyOn=not S.flyOn; setT(S.flyOn); if S.flyOn then fly_enable() else fly_disable() end end)
 end
 
@@ -462,10 +495,18 @@ do local Card=makeCard("Light","Désactive ombres, enlève brouillard, boost lum
 	Toggle.MouseButton1Click:Connect(function() S.lightOn=not S.lightOn; setT(S.lightOn); if S.lightOn then light_enable() else light_disable() end end)
 end
 
--- ESP (SIMPLE)
+-- ESP (Complet, 1 seul mini-toggle username)
 do
-	local Card=makeCard("ESP Player (simple)","Affiche UNIQUEMENT le pseudo au-dessus des joueurs.",100)
+	local Card=makeCard("ESP Player","Pseudo + carré + distance (couleurs dynamiques).",150)
 	local Toggle,setT=makeToggle(Card,false)
+
+	-- mini toggle @username
+	local Row=Instance.new("Frame"); Row.BackgroundTransparency=1; Row.Position=UDim2.fromOffset(12,56); Row.Size=UDim2.new(1,-24,0,28); Row.Parent=Card
+	local L=Instance.new("TextLabel"); L.BackgroundTransparency=1; L.Font=Enum.Font.Gotham; L.TextSize=14; L.TextXAlignment=Enum.TextXAlignment.Left; L.TextColor3=Color3.fromRGB(200,200,210)
+	L.Text="Afficher @username"; L.Position=UDim2.fromOffset(0,6); L.Size=UDim2.fromOffset(160,18); L.Parent=Row
+	local Small,setSmall=makeToggle(Row,S.espShowUsername); Small.Position=UDim2.new(1,-56,0,2); Small.Size=UDim2.fromOffset(56,24)
+	Small.MouseButton1Click:Connect(function() S.espShowUsername=not S.espShowUsername; setSmall(S.espShowUsername) end)
+
 	Toggle.MouseButton1Click:Connect(function()
 		S.espOn=not S.espOn; setT(S.espOn)
 		if S.espOn then esp_enable() else esp_disable() end
@@ -508,7 +549,7 @@ do
 				local b=Instance.new("TextButton"); b.Size=UDim2.new(1,-12,0,30); b.TextXAlignment=Enum.TextXAlignment.Left
 				b.Text=string.format("%s  (@%s)", (p.DisplayName~="" and p.DisplayName) or p.Name, p.Name)
 				b.Font=Enum.Font.Gotham; b.TextSize=14; b.TextColor3=Color3.fromRGB(235,235,240); b.BackgroundColor3=Color3.fromRGB(56,56,66); b.AutoButtonColor=true; b.Parent=listHolder
-				Instance.new("UICorner",b).CornerRadius=UDim.New(0,8)
+				Instance.new("UICorner",b).CornerRadius=UDim.new(0,8)
 				b.MouseButton1Click:Connect(function()
 					S.tpSelectedUserId=p.UserId; S.tpSelectedLabel=(p.DisplayName~="" and p.DisplayName) or p.Name
 					dropdownBtn.Text="Cible : "..S.tpSelectedLabel.."  ▾"; tpBtn.Text="Se TP → "..S.tpSelectedLabel; setTPEnabled(true); listHolder.Visible=false
@@ -589,4 +630,4 @@ UIS.InputBegan:Connect(function(io)
 	end
 end)
 
-print("[Premium Hub v3] prêt. Fly FIX + ESP simple (pseudo only). Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
+print("[Premium Hub v3] prêt. ESP (box+name+distance) live-colors + Fly clean. Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
