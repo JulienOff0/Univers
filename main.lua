@@ -1,12 +1,11 @@
 --[[
-  ⚡ Premium Hub v3 — Speed • Fly • Light • ESP (opt) • TP • NoClip • Infinite Jump
+  ⚡ Premium Hub v3 — Speed • Fly • Light • ESP (simple) • TP • NoClip • Infinite Jump
   Ouvrir/Fermer l'UI : "$" (Shift+4) • F2 • Insert • RightCtrl
 
-  ESP optimisé :
-   - Un seul Billboard/Highlight par joueur (anti-doublons)
-   - Rafraîchissement limité (par défaut 10 Hz)
-   - MAJ uniquement si nécessaire (cache)
-   - Options perf : portée, outline ON/OFF, billboard ON/OFF, @username ON/OFF
+  Modifs demandées:
+   - FLY FIX: sortie de fly propre -> plus bloqué au sol (reset states/velocities/collisions/controls)
+   - ESP SIMPLE: un seul toggle + affiche uniquement le pseudo (DisplayName). Pas de distance, pas de contour.
+   - ESP optimisé (anti-doublons + throttle léger).
 ]]
 
 if _G.__PREMIUM_MENU_V3 then return end
@@ -49,13 +48,8 @@ local S = {
 	-- Light
 	lightOn=false, lightBackup=nil,
 
-	-- ESP (perf)
-	espOn=false, espConn=nil, espAcc=0,
-	espHz=10,            -- rafraîchissements / seconde
-	espRange=900,        -- distance max
-	espOutline=true,     -- contour Highlight
-	espBillboard=true,   -- noms + distance
-	espNameWithUser=true,-- afficher @username
+	-- ESP (simple)
+	espOn=false, espConn=nil, espAcc=0, espHz=10,
 
 	-- TP
 	tpSelectedUserId=nil, tpSelectedLabel=nil,
@@ -172,51 +166,131 @@ local function speed_disable()
 end
 LP.CharacterAdded:Connect(function() if S.speedOn then task.wait(.3); speed_enable() end end)
 
--- ========= Fly =========
+-- ========= Fly (corrigé) =========
 local function fly_disable()
 	S.flyAlive=false; disconnectAll(S.flyConns)
-	if S.flyData then
-		if S.flyData.lv then pcall(function() S.flyData.lv:Destroy() end) end
-		if S.flyData.att then pcall(function() S.flyData.att:Destroy() end) end
-		local hum=S.flyData.humanoid
-		if hum then hum.PlatformStand=false; hum.AutoRotate=true end
-		if S.flyData.collMap then for part,can in pairs(S.flyData.collMap) do if part and part.Parent then part.CanCollide=can end end end
-		if S.flyData.Controls then pcall(function() S.flyData.Controls:Enable() end) end
+	if not S.flyData then return end
+
+	local hrp = S.flyData.hrp
+	local hum = S.flyData.humanoid
+	local Controls = S.flyData.Controls
+	local collMap = S.flyData.collMap
+
+	-- Supprime moteurs
+	pcall(function() if S.flyData.lv then S.flyData.lv.Enabled=false; S.flyData.lv:Destroy() end end)
+	pcall(function() if S.flyData.att then S.flyData.att:Destroy() end end)
+
+	-- Restaure collisions originales
+	if collMap then
+		for part,can in pairs(collMap) do
+			if part and part.Parent then part.CanCollide = can end
+		end
 	end
+
+	-- Stop toute vélocité + rotations
+	if hrp then
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+		-- léger “unstick” vers le haut si le sol colle
+		hrp.CFrame = hrp.CFrame + Vector3.new(0, 0.05, 0)
+	end
+
+	-- Restaure controles + états Humanoid
+	if Controls then pcall(function() Controls:Enable() end) end
+	if hum then
+		hum.AutoRotate = true
+		hum.PlatformStand = false
+		hum.Sit = false
+		-- Séquence d’état pour forcer la reprise
+		pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed) end)
+		pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+		task.delay(0.05, function()
+			if hum and hum.Parent then
+				pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
+			end
+		end)
+	end
+
 	S.flyData=nil
 end
+
 local function fly_enable()
 	fly_disable()
 	local char=getChar(); local hrp=char:WaitForChild("HumanoidRootPart"); local hum=char:WaitForChild("Humanoid")
 	S.flyAlive=true
-	local Controls=nil; pcall(function() local ps=LP:WaitForChild("PlayerScripts"); local ok,PlayerModule=pcall(function() return require(ps:WaitForChild("PlayerModule")) end); if ok and PlayerModule then Controls=PlayerModule:GetControls(); if Controls then Controls:Disable() end end end)
-	hum.AutoRotate=false; hum:ChangeState(Enum.HumanoidStateType.Physics); hum.PlatformStand=true
-	local collMap={}; for _,d in ipairs(char:GetDescendants()) do if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end end
-	table.insert(S.flyConns, char.DescendantAdded:Connect(function(d) if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end end))
+
+	-- Désactive contrôles par défaut
+	local Controls=nil
+	pcall(function()
+		local ps=LP:WaitForChild("PlayerScripts")
+		local ok,PlayerModule=pcall(function() return require(ps:WaitForChild("PlayerModule")) end)
+		if ok and PlayerModule then
+			Controls = PlayerModule:GetControls()
+			if Controls then Controls:Disable() end
+		end
+	end)
+
+	-- Mode physique stable
+	hum.AutoRotate=false
+	hum:ChangeState(Enum.HumanoidStateType.Physics)
+	hum.PlatformStand=true
+
+	-- No-collide (sauvegarde puis force OFF)
+	local collMap={}
+	for _,d in ipairs(char:GetDescendants()) do
+		if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end
+	end
+	table.insert(S.flyConns, char.DescendantAdded:Connect(function(d)
+		if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end
+	end))
+
+	-- Propulsion
 	local att=Instance.new("Attachment"); att.Parent=hrp
 	local lv=Instance.new("LinearVelocity"); lv.Attachment0=att; lv.MaxForce=math.huge; lv.RelativeTo=Enum.ActuatorRelativeTo.World; lv.Parent=hrp
+
 	S.flyData={hrp=hrp,humanoid=hum,lv=lv,att=att,Controls=Controls,collMap=collMap}
-	table.insert(S.flyConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function() if S.flyAlive and hum.PlatformStand~=true then hum.PlatformStand=true end end))
+
+	-- Ré-enforce PlatformStand tant que fly actif
+	table.insert(S.flyConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+		if S.flyAlive and hum.PlatformStand~=true then hum.PlatformStand=true end
+	end))
+	-- Anti-spin
 	table.insert(S.flyConns, RS.Stepped:Connect(function() if S.flyAlive then hrp.AssemblyAngularVelocity=Vector3.zero end end))
-	task.spawn(function() while S.flyAlive and char.Parent do if hum.AutoRotate~=false then hum.AutoRotate=false end if not att.Parent then att.Parent=hrp end if not lv.Parent then lv.Parent=hrp end task.wait(0.05) end end)
+	-- Garde att/lv en place
+	task.spawn(function()
+		while S.flyAlive and char.Parent do
+			if hum.AutoRotate~=false then hum.AutoRotate=false end
+			if not att.Parent then att.Parent=hrp end
+			if not lv.Parent then lv.Parent=hrp end
+			task.wait(0.05)
+		end
+	end)
+
+	-- Déplacement caméra
 	table.insert(S.flyConns, RS.RenderStepped:Connect(function()
 		if not S.flyAlive then return end
 		local cam=workspace.CurrentCamera; if not cam then return end
+
 		local look=cam.CFrame.LookVector
 		local yawDir=Vector3.new(look.X,0,look.Z); if yawDir.Magnitude<1e-3 then yawDir=Vector3.zAxis else yawDir=yawDir.Unit end
 		hrp.CFrame=CFrame.lookAt(hrp.Position, hrp.Position+yawDir, Vector3.yAxis)
+
 		local rightDir=Vector3.new(cam.CFrame.RightVector.X,0,cam.CFrame.RightVector.Z)
 		rightDir=(rightDir.Magnitude>0) and rightDir.Unit or Vector3.new(-yawDir.Z,0,yawDir.X)
+
 		local fwd,right=0,0
 		if UIS:IsKeyDown(Enum.KeyCode.W) then fwd += 1 end
 		if UIS:IsKeyDown(Enum.KeyCode.S) then fwd -= 1 end
 		if UIS:IsKeyDown(Enum.KeyCode.D) then right += 1 end
 		if UIS:IsKeyDown(Enum.KeyCode.A) then right -= 1 end
+
 		local SPEED,VERTICAL,PITCH_DEADZONE=65,45,0.08
 		local horiz=yawDir*fwd + rightDir*right; if horiz.Magnitude>0 then horiz=horiz.Unit*SPEED else horiz=Vector3.zero end
 		local vertical=0; if fwd~=0 then local pitch=look.Y; if math.abs(pitch)>PITCH_DEADZONE then vertical=pitch*VERTICAL*fwd end end
 		lv.VectorVelocity=Vector3.new(horiz.X,vertical,horiz.Z)
 	end))
+
+	-- Cleanup auto si mort
 	table.insert(S.flyConns, hum.Died:Connect(fly_disable))
 end
 
@@ -230,19 +304,13 @@ local function light_disable()
 	if S.lightBackup then Lighting.GlobalShadows=S.lightBackup.GlobalShadows; Lighting.FogEnd=S.lightBackup.FogEnd; Lighting.Brightness=S.lightBackup.Brightness; Lighting.Ambient=S.lightBackup.Ambient end
 end
 
--- ========= ESP (optimisé) =========
-local ROLE_COLORS = {
-	Murder=Color3.fromRGB(255,60,60), Murderer=Color3.fromRGB(255,60,60),
-	Innocent=Color3.fromRGB(64,128,255),
-	Sheriff=Color3.fromRGB(255,220,0), Detective=Color3.fromRGB(255,220,0),
-}
-local DEFAULT_COLOR = Color3.fromRGB(80,150,255)
-local function getRole(p,char) local r=p:GetAttribute("Role"); if r==nil and char then r=char:GetAttribute("Role") end; return (typeof(r)=="string") and r or nil end
-local function colorFor(p,char) local role=getRole(p,char); if role and ROLE_COLORS[role] then return ROLE_COLORS[role] end; if p.Team and p.Team.TeamColor then return p.Team.TeamColor.Color end; return DEFAULT_COLOR end
-local function bestAdornee(char) return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart") end
+-- ========= ESP (SIMPLE : pseudo uniquement) =========
+-- Cache par joueur : un Billboard unique, zéro distance, zéro highlight
+local ESP_REG = {} -- [Player] = {char, bb, name, conns={...}, lastName=""}
 
--- registre par joueur
-local ESP_REG = {} -- [Player] = {char, hl, bb, name, dist, lastName, lastDistInt, conns={...}}
+local function bestAdornee(char)
+	return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart")
+end
 
 local function cleanupLegacy(char)
 	local keep=nil
@@ -260,23 +328,30 @@ end
 local function buildForChar(p,char)
 	if not char or p==LP then return end
 	local reg=ESP_REG[p]
-	if not reg then reg={conns={}}; ESP_REG[p]=reg else disconnectAll(reg.conns) end
+	if not reg then reg={conns={}, lastName=""}; ESP_REG[p]=reg else disconnectAll(reg.conns) end
 	reg.char=char
 
-	-- highlight
-	local hl=char:FindFirstChild("ESP_Highlight")
-	if not hl then hl=Instance.new("Highlight"); hl.Name="ESP_Highlight"; hl.FillTransparency=1; hl.OutlineTransparency=0; hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent=char end
-	reg.hl=hl
-
-	-- billboard unique
+	-- Billboard unique, UNE ligne (pseudo)
 	local bb=cleanupLegacy(char)
 	if not bb then
-		bb=Instance.new("BillboardGui"); bb.Name="ESP_BBG"; bb.Size=UDim2.new(0,210,0,48); bb.StudsOffset=Vector3.new(0,3,0); bb.AlwaysOnTop=true; bb.MaxDistance=5000; bb.Parent=char
-		local nameLbl=Instance.new("TextLabel"); nameLbl.Name="Name"; nameLbl.BackgroundTransparency=1; nameLbl.Size=UDim2.new(1,0,0.5,0); nameLbl.Font=Enum.Font.GothamBold; nameLbl.TextScaled=true; nameLbl.TextStrokeTransparency=.5; nameLbl.Parent=bb
-		local distLbl=Instance.new("TextLabel"); distLbl.Name="Dist"; distLbl.BackgroundTransparency=1; distLbl.Position=UDim2.new(0,0,0.5,0); distLbl.Size=UDim2.new(1,0,0.5,0); distLbl.Font=Enum.Font.Gotham; distLbl.TextScaled=true; distLbl.TextStrokeTransparency=.5; distLbl.Parent=bb
+		bb=Instance.new("BillboardGui"); bb.Name="ESP_BBG"
+		bb.Size=UDim2.new(0, 200, 0, 28)
+		bb.StudsOffset=Vector3.new(0,3,0)
+		bb.AlwaysOnTop=true
+		bb.MaxDistance=5000
+		bb.Parent=char
+		local nameLbl=Instance.new("TextLabel"); nameLbl.Name="Name"
+		nameLbl.BackgroundTransparency=1
+		nameLbl.Size=UDim2.new(1,0,1,0)
+		nameLbl.Font=Enum.Font.GothamBold
+		nameLbl.TextScaled=true
+		nameLbl.TextStrokeTransparency=0.5
+		nameLbl.TextColor3=Color3.fromRGB(235,235,240)
+		nameLbl.Parent=bb
 	end
-	reg.bb=bb; reg.name=bb:FindFirstChild("Name"); reg.dist=bb:FindFirstChild("Dist"); reg.lastName=""; reg.lastDistInt=-1
-	bb.Adornee = bestAdornee(char)
+	reg.bb=bb
+	reg.name=bb:FindFirstChild("Name")
+	reg.bb.Adornee = bestAdornee(char)
 
 	table.insert(reg.conns, char.DescendantAdded:Connect(function(d)
 		if d.Name=="Head" and d:IsA("BasePart") then if reg.bb and reg.bb.Adornee~=d then reg.bb.Adornee=d end end
@@ -288,7 +363,7 @@ local function ensureBuilt(p)
 	local char=p.Character
 	if not char then return end
 	local reg=ESP_REG[p]
-	if not reg or reg.char~=char or not reg.bb or not reg.hl then buildForChar(p,char) end
+	if not reg or reg.char~=char or not reg.bb then buildForChar(p,char) end
 end
 
 local function esp_update(dt)
@@ -296,36 +371,22 @@ local function esp_update(dt)
 	if S.espAcc < (1 / math.max(1, S.espHz)) then return end
 	S.espAcc = 0
 
-	local myC=LP.Character; if not myC then return end
-	local myHRP=myC:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
-
 	for _,p in ipairs(Players:GetPlayers()) do
 		if p~=LP then
 			ensureBuilt(p)
 			local reg=ESP_REG[p]
 			local char=p.Character
-			if reg and char then
-				local tHRP=char:FindFirstChild("HumanoidRootPart")
-				if tHRP then
-					local dist=(myHRP.Position - tHRP.Position).Magnitude
-					local inRange = dist <= S.espRange
-					local col = colorFor(p,char)
-
-					if reg.hl then
-						reg.hl.Enabled = S.espOutline and inRange
-						reg.hl.OutlineColor = col
-					end
-
-					if reg.bb then
-						reg.bb.Enabled = S.espBillboard and inRange
-						if reg.bb.Enabled then
-							if (not reg.bb.Adornee) or (not reg.bb.Adornee.Parent) then reg.bb.Adornee = bestAdornee(char) end
-							local wantName = S.espNameWithUser and (p.DisplayName.." (@"..p.Name..")") or p.DisplayName
-							if reg.name and reg.lastName ~= wantName then reg.name.Text = wantName; reg.name.TextColor3 = col; reg.lastName = wantName end
-							local di = dist >= 0 and math.floor(dist + 0.5) or 0
-							if reg.dist and reg.lastDistInt ~= di then reg.dist.Text = tostring(di).." studs"; reg.dist.TextColor3 = col; reg.lastDistInt = di end
-						end
-					end
+			if reg and char and reg.bb and reg.name then
+				reg.bb.Enabled = true
+				-- MAJ texte seulement si ça change
+				local wantName = (p.DisplayName and p.DisplayName ~= "") and p.DisplayName or p.Name
+				if reg.lastName ~= wantName then
+					reg.name.Text = wantName
+					reg.lastName = wantName
+				end
+				-- assure une Adornee valide
+				if (not reg.bb.Adornee) or (not reg.bb.Adornee.Parent) then
+					reg.bb.Adornee = bestAdornee(char)
 				end
 			end
 		end
@@ -344,7 +405,6 @@ end
 local function esp_disable()
 	disconnect(S.espConn); S.espConn=nil
 	for _,reg in pairs(ESP_REG) do
-		if reg.hl then reg.hl.Enabled=false end
 		if reg.bb then reg.bb.Enabled=false end
 	end
 end
@@ -393,7 +453,7 @@ do
 end
 
 -- Fly
-do local Card=makeCard("Fly","Vol fluide (WASD/ZQSD + inclinaison caméra)",100); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("Fly","Vol fluide (WASD/ZQSD + inclinaison caméra) — FIX sortie propre",100); local Toggle,setT=makeToggle(Card,false)
 	Toggle.MouseButton1Click:Connect(function() S.flyOn=not S.flyOn; setT(S.flyOn); if S.flyOn then fly_enable() else fly_disable() end end)
 end
 
@@ -402,28 +462,10 @@ do local Card=makeCard("Light","Désactive ombres, enlève brouillard, boost lum
 	Toggle.MouseButton1Click:Connect(function() S.lightOn=not S.lightOn; setT(S.lightOn); if S.lightOn then light_enable() else light_disable() end end)
 end
 
--- ESP
+-- ESP (SIMPLE)
 do
-	local Card=makeCard("ESP Player","Contours + noms/distance (optimisé).",180)
+	local Card=makeCard("ESP Player (simple)","Affiche UNIQUEMENT le pseudo au-dessus des joueurs.",100)
 	local Toggle,setT=makeToggle(Card,false)
-
-	-- Ligne 1 : trois toggles
-	local Row1=Instance.new("Frame"); Row1.BackgroundTransparency=1; Row1.Position=UDim2.fromOffset(12,56); Row1.Size=UDim2.new(1,-24,0,28); Row1.Parent=Card
-	local HL1=Instance.new("UIListLayout",Row1); HL1.FillDirection=Enum.FillDirection.Horizontal; HL1.Padding=UDim.new(0,12)
-	local function tiny(label, default, cb)
-		local Wrap=Instance.new("Frame"); Wrap.BackgroundTransparency=1; Wrap.Size=UDim2.fromOffset(210,28); Wrap.Parent=Row1
-		local L=Instance.new("TextLabel"); L.BackgroundTransparency=1; L.Font=Enum.Font.Gotham; L.TextSize=14; L.TextXAlignment=Enum.TextXAlignment.Left; L.TextColor3=Color3.fromRGB(200,200,210); L.Text=label; L.Position=UDim2.fromOffset(0,6); L.Size=UDim2.fromOffset(140,18); L.Parent=Wrap
-		local Btn,setOn=makeToggle(Wrap,default); Btn.Position=UDim2.new(1,-56,0,2); Btn.Size=UDim2.fromOffset(56,24)
-		Btn.MouseButton1Click:Connect(function() default=not default; setOn(default); if cb then cb(default) end end); setOn(default)
-	end
-	tiny("Outline", S.espOutline, function(v) S.espOutline=v end)
-	tiny("Billboard (noms)", S.espBillboard, function(v) S.espBillboard=v end)
-	tiny("Afficher @username", S.espNameWithUser, function(v) S.espNameWithUser=v end)
-
-	-- Ligne 2 : sliders portée + fréquence
-	makeSlider(Card,"Portée (studs)",100,3000,S.espRange,90,function(v) S.espRange=v end)
-	makeSlider(Card,"Rafraîchissements/s",4,30,S.espHz,130,function(v) S.espHz=v end)
-
 	Toggle.MouseButton1Click:Connect(function()
 		S.espOn=not S.espOn; setT(S.espOn)
 		if S.espOn then esp_enable() else esp_disable() end
@@ -466,7 +508,7 @@ do
 				local b=Instance.new("TextButton"); b.Size=UDim2.new(1,-12,0,30); b.TextXAlignment=Enum.TextXAlignment.Left
 				b.Text=string.format("%s  (@%s)", (p.DisplayName~="" and p.DisplayName) or p.Name, p.Name)
 				b.Font=Enum.Font.Gotham; b.TextSize=14; b.TextColor3=Color3.fromRGB(235,235,240); b.BackgroundColor3=Color3.fromRGB(56,56,66); b.AutoButtonColor=true; b.Parent=listHolder
-				Instance.new("UICorner",b).CornerRadius=UDim.new(0,8)
+				Instance.new("UICorner",b).CornerRadius=UDim.New(0,8)
 				b.MouseButton1Click:Connect(function()
 					S.tpSelectedUserId=p.UserId; S.tpSelectedLabel=(p.DisplayName~="" and p.DisplayName) or p.Name
 					dropdownBtn.Text="Cible : "..S.tpSelectedLabel.."  ▾"; tpBtn.Text="Se TP → "..S.tpSelectedLabel; setTPEnabled(true); listHolder.Visible=false
@@ -547,4 +589,4 @@ UIS.InputBegan:Connect(function(io)
 	end
 end)
 
-print("[Premium Hub v3] prêt. ESP optimisé (anti-doublons + throttle). Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
+print("[Premium Hub v3] prêt. Fly FIX + ESP simple (pseudo only). Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
