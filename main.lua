@@ -1,13 +1,14 @@
 --[[
-  ⚡ Premium Hub v3 — Speed • Fly • Light • ESP (box+name+distance) • TP • NoClip • Infinite Jump
+  ⚡ Premium Hub v3 — Speed • Fly • Light • ESP (box+name+distance) • TP • NoClip • Infinite Jump • Hitbox
   Ouvrir/Fermer l'UI : "$" (Shift+4) • F2 • Insert • RightCtrl
 
-  ESP remis "complet" :
+  Nouveauté:
+   - Hitbox (client): agrandit le HumanoidRootPart des autres joueurs, réglable, propre & réversible.
+
+  ESP:
    - Pseudo + carré (SelectionBox) + distance
-   - Couleurs par rôle (sinon TeamColor, sinon gris)
-   - MAJ live quand rôles/équipes changent
-   - Anti-doublons + throttle 10 Hz
-   - Petit toggle optionnel : afficher @username
+   - Couleurs: rôle > équipe > défaut
+   - MAJ live si rôle/équipe changent
 ]]
 
 if _G.__PREMIUM_MENU_V3 then return end
@@ -52,7 +53,11 @@ local S = {
 
 	-- ESP (complet)
 	espOn=false, espConn=nil, espAcc=0, espHz=10,
-	espShowUsername=true,         -- << unique option d’ESP demandée
+	espShowUsername=true, -- unique option d’ESP
+
+	-- Hitbox
+	hitboxOn=false, hitboxSize=10,
+	hitboxConn=nil, hitboxOrig={}, -- [HRP] = {Size=..., Transparency=..., Material=..., CanCollide=...}
 
 	-- TP
 	tpSelectedUserId=nil, tpSelectedLabel=nil,
@@ -68,7 +73,7 @@ local S = {
 local UI = Instance.new("ScreenGui"); UI.Name="PremiumHubV3"; safeParent(UI)
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(510, 560)
+Main.Size = UDim2.fromOffset(510, 640) -- un peu plus haut pour la Hitbox card
 Main.BackgroundColor3 = Color3.fromRGB(18,18,20)
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -86,7 +91,7 @@ Shadow.AnchorPoint=Vector2.new(.5,.5); Shadow.Position=UDim2.fromScale(.5,.5); S
 local Header=Instance.new("Frame"); Header.Size=UDim2.new(1,0,0,46); Header.BackgroundTransparency=1; Header.Active=true; Header.Parent=Main
 local Title=Instance.new("TextLabel"); Title.BackgroundTransparency=1; Title.Position=UDim2.fromOffset(14,8); Title.Size=UDim2.fromOffset(360,30)
 Title.Font=Enum.Font.GothamBold; Title.TextSize=18; Title.TextXAlignment=Enum.TextXAlignment.Left; Title.TextColor3=Color3.fromRGB(255,255,255)
-Title.Text="⚡ Premium Hub v3 — Speed • Fly • Light • ESP • TP • NoClip • IJ"; Title.Parent=Header
+Title.Text="⚡ Premium Hub v3 — Speed • Fly • Light • ESP • TP • NoClip • IJ • Hitbox"; Title.Parent=Header
 local Hint=Instance.new("TextLabel"); Hint.BackgroundTransparency=1; Hint.AnchorPoint=Vector2.new(1,0); Hint.Position=UDim2.new(1,-42,0,10)
 Hint.Size=UDim2.fromOffset(300,24); Hint.Font=Enum.Font.Gotham; Hint.TextSize=14; Hint.TextXAlignment=Enum.TextXAlignment.Right; Hint.TextColor3=Color3.fromRGB(180,180,190)
 Hint.Text='Hide: "$"(⇧+4) • F2 • Insert • RightCtrl'; Hint.Parent=Header
@@ -106,7 +111,7 @@ VList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshCanvas)
 local function makeCard(titleText, subtitleText, height)
 	local Card=Instance.new("Frame"); Card.Size=UDim2.new(1,0,0,height); Card.BackgroundColor3=Color3.fromRGB(24,24,28); Card.BorderSizePixel=0; Card.Active=true; Card.Parent=Content
 	Instance.new("UICorner",Card).CornerRadius=UDim.new(0,12)
-	local s=Instance.new("UIStroke",Card); s.Thickness=1; s.Transparency=.25; s.Color=Color3.fromRGB(255,255,255)
+	local s=Instance.new("UIStroke",Card); s.Thickness=1; s.Transparency=0.25; s.Color=Color3.fromRGB(255,255,255)
 	local T=Instance.new("TextLabel"); T.BackgroundTransparency=1; T.Font=Enum.Font.GothamSemibold; T.TextSize=16; T.TextXAlignment=Enum.TextXAlignment.Left; T.TextColor3=Color3.fromRGB(235,235,240); T.Text=titleText; T.Position=UDim2.fromOffset(12,8); T.Size=UDim2.fromOffset(360,20); T.Parent=Card
 	local ST=Instance.new("TextLabel"); ST.BackgroundTransparency=1; ST.Font=Enum.Font.Gotham; ST.TextSize=13; ST.TextXAlignment=Enum.TextXAlignment.Left; ST.TextColor3=Color3.fromRGB(170,170,182); ST.Text=subtitleText or ""; ST.Position=UDim2.fromOffset(12,30); ST.Size=UDim2.fromOffset(470,18); ST.Parent=Card
 	return Card
@@ -169,7 +174,7 @@ local function speed_disable()
 end
 LP.CharacterAdded:Connect(function() if S.speedOn then task.wait(.3); speed_enable() end end)
 
--- ========= Fly (corrigé / sortie propre) =========
+-- ========= Fly (sortie propre) =========
 local function fly_disable()
 	S.flyAlive=false; disconnectAll(S.flyConns)
 	if not S.flyData then return end
@@ -201,7 +206,6 @@ local function fly_disable()
 			if hum and hum.Parent then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end) end
 		end)
 	end
-
 	S.flyData=nil
 end
 
@@ -278,7 +282,7 @@ local ROLE_COLORS = {
 	Sheriff=Color3.fromRGB(255,220,0), Detective=Color3.fromRGB(255,220,0),
 }
 local DEFAULT_COLOR = Color3.fromRGB(200,200,200)
-local ESP_MAX_DIST = math.huge  -- pas de limite
+local ESP_MAX_DIST = math.huge
 
 local function getRole(p,char) local r=p:GetAttribute("Role"); if r==nil and char then r=char:GetAttribute("Role") end; return (typeof(r)=="string") and r or nil end
 local function colorFor(p,char)
@@ -291,7 +295,6 @@ local function bestAdornee(char) return char:FindFirstChild("Head") or char:Find
 local ESP_REG = {} -- [Player] = {char, box, bb, name, dist, lastName="", lastDist=-1, lastColor=nil, conns={...}}
 
 local function cleanupLegacy(char)
-	-- garde un seul Billboard "ESP_BBG" et un seul SelectionBox "ESP_Box"
 	local keepBB=nil
 	for _,d in ipairs(char:GetChildren()) do
 		if d:IsA("BillboardGui") and d.Name=="ESP_BBG" then
@@ -300,7 +303,7 @@ local function cleanupLegacy(char)
 	end
 	for _,d in ipairs(char:GetChildren()) do
 		if d:IsA("SelectionBox") and d.Name=="ESP_Box" then
-			d:Destroy() -- on reconstruit propre pour contrôler les props
+			d:Destroy()
 		end
 	end
 	return keepBB
@@ -312,7 +315,6 @@ local function makeOrGet(p,char)
 	if not reg then reg={conns={}}; ESP_REG[p]=reg else disconnectAll(reg.conns) end
 	reg.char=char
 
-	-- SelectionBox (carré)
 	local box=Instance.new("SelectionBox")
 	box.Name="ESP_Box"
 	box.Adornee=char
@@ -321,7 +323,6 @@ local function makeOrGet(p,char)
 	box.Parent=char
 	reg.box=box
 
-	-- Billboard: pseudo + distance
 	local bb=cleanupLegacy(char)
 	if not bb then
 		bb=Instance.new("BillboardGui"); bb.Name="ESP_BBG"
@@ -337,10 +338,9 @@ local function makeOrGet(p,char)
 		distLbl.BackgroundTransparency=1; distLbl.Position=UDim2.new(0,0,0.5,0); distLbl.Size=UDim2.new(1,0,0.5,0)
 		distLbl.Font=Enum.Font.Gotham; distLbl.TextScaled=true; distLbl.TextStrokeTransparency=.5; distLbl.Parent=bb
 	end
-	reg.bb=bb; reg.name=bb:FindFirstChild("Name"); reg.dist=bb:FindFirstChild("Dist"); reg.lastName=""; reg.lastDist=-1
+	reg.bb=bb; reg.name=bb:FindChild("Name") or bb:FindFirstChild("Name"); reg.dist=bb:FindChild("Dist") or bb:FindFirstChild("Dist"); reg.lastName=""; reg.lastDist=-1
 	bb.Adornee = bestAdornee(char)
 
-	-- recalc adornee si la tête apparaît après
 	table.insert(reg.conns, char.DescendantAdded:Connect(function(d)
 		if d.Name=="Head" and d:IsA("BasePart") then if reg.bb and reg.bb.Adornee~=d then reg.bb.Adornee=d end end
 	end))
@@ -361,13 +361,6 @@ end
 local function colorsEqual(a,b) if not a or not b then return false end; return a.r==b.r and a.g==b.g and a.b==b.b end
 
 local function esp_tick(dt)
-	S.espAcc += dt
-	if S.espAcc < (1 / math.max(1, S.espHz)) then return end
-	S.espAcc = 0
-
-	local myC=LP.Character; if not myC then return end
-	local myHRP=myC:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
-
 	for _,p in ipairs(Players:GetPlayers()) do
 		if p~=LP then
 			ensureBuilt(p)
@@ -375,49 +368,30 @@ local function esp_tick(dt)
 			local char=p.Character
 			if not (reg and char and reg.box and reg.bb and reg.name and reg.dist) then continue end
 
-			local tHRP=char:FindFirstChild("HumanoidRootPart")
+			local myC=LP.Character; if not myC then continue end
+			local myHRP=myC:FindFirstChild("HumanoidRootPart"); local tHRP=char:FindFirstChild("HumanoidRootPart")
 			local head = char:FindFirstChild("Head") or char:FindFirstChildWhichIsA("BasePart")
-			if not (tHRP and head) then
-				reg.box.Visible=false
-				reg.bb.Enabled=false
-				continue
-			end
+			if not (myHRP and tHRP and head) then reg.box.Visible=false; reg.bb.Enabled=false; continue end
 
-			-- distance
 			local dist=(myHRP.Position - tHRP.Position).Magnitude
-			if dist > ESP_MAX_DIST then
-				reg.box.Visible=false
-				reg.bb.Enabled=false
-				continue
-			end
+			if dist > ESP_MAX_DIST then reg.box.Visible=false; reg.bb.Enabled=false; continue end
 
-			-- color (role > team > default)
 			local col = colorFor(p,char)
 			if not colorsEqual(reg.lastColor, col) then
 				reg.lastColor = col
-				-- SelectionBox couleurs (selon API)
 				pcall(function() reg.box.LineColor3 = col end)
-				pcall(function() reg.box.Color3 = col end) -- compat plus vieux clients
+				pcall(function() reg.box.Color3 = col end)
 				reg.name.TextColor3 = col
 				reg.dist.TextColor3 = col
 			end
 
-			-- texte pseudo
 			local display = (p.DisplayName and p.DisplayName ~= "") and p.DisplayName or p.Name
 			local wantName = S.espShowUsername and (display.." (@"..p.Name..")") or display
-			if reg.lastName ~= wantName then
-				reg.name.Text = wantName
-				reg.lastName = wantName
-			end
+			if reg.lastName ~= wantName then reg.name.Text = wantName; reg.lastName = wantName end
 
-			-- distance arrondie
 			local di = (dist >= 0) and math.floor(dist + 0.5) or 0
-			if reg.lastDist ~= di then
-				reg.dist.Text = tostring(di).." studs"
-				reg.lastDist = di
-			end
+			if reg.lastDist ~= di then reg.dist.Text = tostring(di).." studs"; reg.lastDist = di end
 
-			-- visibilité + adornee safe
 			reg.box.Visible = true
 			reg.bb.Enabled = true
 			if (not reg.bb.Adornee) or (not reg.bb.Adornee.Parent) then reg.bb.Adornee = bestAdornee(char) end
@@ -428,7 +402,7 @@ end
 local function esp_enable()
 	if S.espConn then return end
 	for _,pl in ipairs(Players:GetPlayers()) do if pl~=LP and pl.Character then makeOrGet(pl, pl.Character) end end
-	S.espConn = RS.Heartbeat:Connect(esp_tick)
+	S.espConn = RS.Heartbeat:Connect(esp_tick) -- 60 Hz; léger et sûr pour rafraîchir couleurs/roles
 	Players.PlayerAdded:Connect(function(p)
 		p.CharacterAdded:Connect(function(c) task.wait(0.2); makeOrGet(p,c) end)
 		if p.Character then makeOrGet(p,p.Character) end
@@ -440,6 +414,75 @@ local function esp_disable()
 		if reg.box then reg.box.Visible=false end
 		if reg.bb then reg.bb.Enabled=false end
 	end
+end
+
+-- ========= Hitbox =========
+local function rememberHRP(hrp)
+	if not hrp or S.hitboxOrig[hrp] then return end
+	S.hitboxOrig[hrp] = {
+		Size = hrp.Size,
+		Transparency = hrp.Transparency,
+		Material = hrp.Material,
+		CanCollide = hrp.CanCollide,
+	}
+end
+
+local function applyHitboxTo(hrp)
+	if not hrp then return end
+	rememberHRP(hrp)
+	-- Valeurs "style original": Neon rouge, semi-transparent, pas de collisions
+	hrp.Size = Vector3.new(S.hitboxSize, S.hitboxSize, S.hitboxSize)
+	hrp.Transparency = 0.7
+	hrp.BrickColor = BrickColor.new("Really red")
+	hrp.Material = Enum.Material.Neon
+	hrp.CanCollide = false
+end
+
+local function restoreAllHitbox()
+	for hrp,orig in pairs(S.hitboxOrig) do
+		if hrp and hrp.Parent and orig then
+			pcall(function()
+				hrp.Size = orig.Size
+				hrp.Transparency = orig.Transparency
+				hrp.Material = orig.Material
+				hrp.CanCollide = orig.CanCollide
+			end)
+		end
+	end
+	S.hitboxOrig = {}
+end
+
+local function hitbox_loop()
+	-- Boucle côté client pour contrer les resets serveurs
+	for _,pl in ipairs(Players:GetPlayers()) do
+		if pl ~= LP and pl.Character then
+			local hrp = pl.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then pcall(applyHitboxTo, hrp) end
+		end
+	end
+end
+
+local function hitbox_enable()
+	if S.hitboxConn then return end
+	-- Applique immédiatement
+	hitbox_loop()
+	-- Et maintient à chaque RenderStepped (fluide)
+	S.hitboxConn = RS.RenderStepped:Connect(function()
+		if S.hitboxOn then hitbox_loop() end
+	end)
+	-- Sur nouveaux joueurs / respawn, on mémorise les originaux dès que possible
+	Players.PlayerAdded:Connect(function(p)
+		p.CharacterAdded:Connect(function(c)
+			task.wait(0.1)
+			local hrp = c:FindFirstChild("HumanoidRootPart")
+			if hrp then rememberHRP(hrp) end
+		end)
+	end)
+end
+
+local function hitbox_disable()
+	disconnect(S.hitboxConn); S.hitboxConn=nil
+	restoreAllHitbox()
 end
 
 -- ========= NoClip =========
@@ -495,12 +538,11 @@ do local Card=makeCard("Light","Désactive ombres, enlève brouillard, boost lum
 	Toggle.MouseButton1Click:Connect(function() S.lightOn=not S.lightOn; setT(S.lightOn); if S.lightOn then light_enable() else light_disable() end end)
 end
 
--- ESP (Complet, 1 seul mini-toggle username)
+-- ESP (Complet, mini-toggle username)
 do
 	local Card=makeCard("ESP Player","Pseudo + carré + distance (couleurs dynamiques).",150)
 	local Toggle,setT=makeToggle(Card,false)
 
-	-- mini toggle @username
 	local Row=Instance.new("Frame"); Row.BackgroundTransparency=1; Row.Position=UDim2.fromOffset(12,56); Row.Size=UDim2.new(1,-24,0,28); Row.Parent=Card
 	local L=Instance.new("TextLabel"); L.BackgroundTransparency=1; L.Font=Enum.Font.Gotham; L.TextSize=14; L.TextXAlignment=Enum.TextXAlignment.Left; L.TextColor3=Color3.fromRGB(200,200,210)
 	L.Text="Afficher @username"; L.Position=UDim2.fromOffset(0,6); L.Size=UDim2.fromOffset(160,18); L.Parent=Row
@@ -510,6 +552,19 @@ do
 	Toggle.MouseButton1Click:Connect(function()
 		S.espOn=not S.espOn; setT(S.espOn)
 		if S.espOn then esp_enable() else esp_disable() end
+	end)
+end
+
+-- Hitbox (nouvelle carte)
+do
+	local Card=makeCard("Hitbox (HRP)","Agrandit le HumanoidRootPart des AUTRES joueurs (client-side).",150)
+	local Toggle,setT=makeToggle(Card,false)
+	makeSlider(Card,"Taille",2,30,S.hitboxSize,56,function(v) S.hitboxSize=v end)
+
+	Toggle.MouseButton1Click:Connect(function()
+		S.hitboxOn = not S.hitboxOn
+		setT(S.hitboxOn)
+		if S.hitboxOn then hitbox_enable() else hitbox_disable() end
 	end)
 end
 
@@ -630,4 +685,4 @@ UIS.InputBegan:Connect(function(io)
 	end
 end)
 
-print("[Premium Hub v3] prêt. ESP (box+name+distance) live-colors + Fly clean. Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
+print("[Premium Hub v3] prêt. Hitbox + ESP complet + Fly clean. Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
