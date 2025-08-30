@@ -1,15 +1,20 @@
 --[[
-  ⚡ Premium Hub v4 — Speed • Fly • Light • ESP (aura+box+name+distance) • TP • NoClip • IJ • Hitbox
+  👑 Premium Hub v5 — Speed • Fly • Light • ESP (aura+box+name+distance) • TP • NoClip • IJ • Hitbox
   Ouvrir/Fermer l'UI : "$" (Shift+4) • F2 • Insert • RightCtrl
 
-  CHANGEMENTS (v4) :
-   - ESP FIX 💥 : pseudo + distance rétablis, aura couleur (Highlight) + box (SelectionBox),
-                  plus de doublons, parentage Billboard correct (Head), MAJ live rôles/équipes.
-   - UI VIP ✨  : gradient, ombres douces, micro-animations, titres avec icônes.
+  v5 UI:
+   - Style verre + dégradés, ombres douces, hover anim.
+   - Composants premium (toggle/slider) avec micro-animations.
+   - Layout stable, fluide, sans fuite de connexions.
+
+  ESP:
+   - Aura (Highlight) + Box 3D + pseudo + distance
+   - Couleurs dynamiques (rôle > équipe > défaut), MAJ live
+   - Anti-doublons + parentage billboard sur Head/HRP
 ]]
 
-if _G.__PREMIUM_MENU_V4 then return end
-_G.__PREMIUM_MENU_V4 = true
+if _G.__PREMIUM_MENU_V5 then return end
+_G.__PREMIUM_MENU_V5 = true
 
 -- ========= Services =========
 local Players  = game:GetService("Players")
@@ -49,10 +54,7 @@ local S = {
 	lightOn=false, lightBackup=nil,
 
 	-- ESP
-	espOn=false, espConn=nil,
-	espHz=10,                     -- throttle (perf + stable)
-	espShowUsername=true,         -- unique option visible côté ESP
-	espMaxDist=math.huge,
+	espOn=false, espConn=nil, espHz=10, espShowUsername=true, espMaxDist=math.huge,
 
 	-- Hitbox
 	hitboxOn=false, hitboxSize=10, hitboxConn=nil, hitboxOrig={},
@@ -67,132 +69,156 @@ local S = {
 	ijOn=false, ijBoost=55, ijConn=nil,
 }
 
--- ========= UI =========
-local UI = Instance.new("ScreenGui"); UI.Name="PremiumHubV4"; safeParent(UI)
+-- ========= THEME =========
+local THEME = {
+	bg        = Color3.fromRGB(12,13,16),
+	card      = Color3.fromRGB(22,24,29),
+	cardTop   = Color3.fromRGB(28,30,36),
+	text      = Color3.fromRGB(235,238,255),
+	muted     = Color3.fromRGB(170,176,196),
+	stroke    = Color3.fromRGB(255,255,255),
+	primaryA  = Color3.fromRGB(58,116,255),
+	primaryB  = Color3.fromRGB(208,102,255),
+	success   = Color3.fromRGB(66,205,136),
+	neutral   = Color3.fromRGB(66,70,88),
+	accentBar = Color3.fromRGB(110,170,255),
+}
 
--- Root
+-- ========= UI ROOT =========
+local UI = Instance.new("ScreenGui"); UI.Name="PremiumHubV5"; safeParent(UI)
+
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(560, 700)
-Main.BackgroundColor3 = Color3.fromRGB(16,16,19)
+Main.Size = UDim2.fromOffset(600, 720)
+Main.BackgroundColor3 = THEME.bg
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Parent = UI
 do local vs=workspace.CurrentCamera.ViewportSize
 	Main.Position = UDim2.fromOffset(math.floor(vs.X/2 - Main.Size.X.Offset/2), math.floor(vs.Y/2 - Main.Size.Y.Offset/2))
 end
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0,16)
-local stroke=Instance.new("UIStroke",Main) stroke.Thickness=1.5; stroke.Transparency=.15; stroke.Color=Color3.fromRGB(255,255,255)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0,18)
+local stroke=Instance.new("UIStroke",Main) stroke.Thickness=1.2; stroke.Transparency=.82; stroke.Color=THEME.stroke
 
--- Soft shadow
+-- Soft outer shadow
 local Shadow=Instance.new("ImageLabel")
 Shadow.Image="rbxassetid://5028857084"
-Shadow.ImageTransparency=.45
+Shadow.ImageTransparency=.5
 Shadow.ScaleType=Enum.ScaleType.Slice
 Shadow.SliceCenter=Rect.new(24,24,276,276)
-Shadow.AnchorPoint=Vector2.new(.5,.5)
-Shadow.Position=UDim2.fromScale(.5,.5)
-Shadow.Size=UDim2.new(1,40,1,40)
-Shadow.BackgroundTransparency=1
-Shadow.Parent=Main
+Shadow.AnchorPoint=Vector2.new(.5,.5); Shadow.Position=UDim2.fromScale(.5,.5)
+Shadow.Size=UDim2.new(1,46,1,46); Shadow.BackgroundTransparency=1; Shadow.Parent=Main
 
--- Gradient glaze
-local Glaze = Instance.new("Frame"); Glaze.BackgroundTransparency = 1; Glaze.Size = UDim2.fromScale(1,1); Glaze.Parent = Main
-local G = Instance.new("UIGradient", Glaze)
-G.Rotation = 25
-G.Transparency = NumberSequence.new{
-	NumberSequenceKeypoint.new(0, 0.3),
-	NumberSequenceKeypoint.new(0.5, 0.6),
-	NumberSequenceKeypoint.new(1, 0.3)
-}
-G.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(38,66,255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(195,92,255))
-}
+-- Header (glass bar)
+local Header=Instance.new("Frame"); Header.Size=UDim2.new(1,0,0,64); Header.BackgroundColor3=THEME.cardTop; Header.BorderSizePixel=0; Header.Active=true; Header.Parent=Main
+Instance.new("UICorner",Header).CornerRadius=UDim.new(0,18)
+local hStroke=Instance.new("UIStroke",Header); hStroke.Transparency=.7; hStroke.Thickness=1
+local gradBar=Instance.new("Frame"); gradBar.BackgroundTransparency=.2; gradBar.Size=UDim2.new(1,-32,0,64); gradBar.Position=UDim2.fromOffset(16,0); gradBar.Parent=Header
+local g=Instance.new("UIGradient", gradBar)
+g.Rotation=18; g.Color=ColorSequence.new(THEME.primaryA, THEME.primaryB); g.Transparency=NumberSequence.new{NumberSequenceKeypoint.new(0,.95), NumberSequenceKeypoint.new(.5,.85), NumberSequenceKeypoint.new(1,.95)}
 
--- Header
-local Header=Instance.new("Frame"); Header.Size=UDim2.new(1,0,0,56); Header.BackgroundTransparency=1; Header.Active=true; Header.Parent=Main
-local Title=Instance.new("TextLabel"); Title.BackgroundTransparency=1; Title.Position=UDim2.fromOffset(16,10); Title.Size=UDim2.fromOffset(380,32)
-Title.Font=Enum.Font.GothamBlack; Title.TextSize=20; Title.TextXAlignment=Enum.TextXAlignment.Left; Title.TextColor3=Color3.fromRGB(255,255,255)
-Title.Text="👑 Premium Hub v4 — VIP"
-Title.Parent=Header
-local Hint=Instance.new("TextLabel"); Hint.BackgroundTransparency=1; Hint.AnchorPoint=Vector2.new(1,0); Hint.Position=UDim2.new(1,-46,0,14)
-Hint.Size=UDim2.fromOffset(320,24); Hint.Font=Enum.Font.Gotham; Hint.TextSize=14; Hint.TextXAlignment=Enum.TextXAlignment.Right; Hint.TextColor3=Color3.fromRGB(185,190,205)
+local Title=Instance.new("TextLabel"); Title.BackgroundTransparency=1; Title.Position=UDim2.fromOffset(18,12); Title.Size=UDim2.fromOffset(400,40)
+Title.Font=Enum.Font.GothamBlack; Title.TextSize=22; Title.TextXAlignment=Enum.TextXAlignment.Left; Title.TextColor3=THEME.text
+Title.Text="👑 Premium Hub v5 — VIP"; Title.Parent=Header
+
+local Hint=Instance.new("TextLabel"); Hint.BackgroundTransparency=1; Hint.AnchorPoint=Vector2.new(1,0); Hint.Position=UDim2.new(1,-52,0,20)
+Hint.Size=UDim2.fromOffset(340,24); Hint.Font=Enum.Font.Gotham; Hint.TextSize=14; Hint.TextXAlignment=Enum.TextXAlignment.Right; Hint.TextColor3=THEME.muted
 Hint.Text='Hide: "$"(⇧+4) • F2 • Insert • RightCtrl'; Hint.Parent=Header
 
-local HideBtn=Instance.new("TextButton"); HideBtn.AnchorPoint=Vector2.new(1,0); HideBtn.Position=UDim2.new(1,-10,0,10); HideBtn.Size=UDim2.fromOffset(30,30)
-HideBtn.Text="✕"; HideBtn.TextSize=18; HideBtn.Font=Enum.Font.GothamBold; HideBtn.TextColor3=Color3.fromRGB(235,240,255); HideBtn.AutoButtonColor=false
-HideBtn.BackgroundColor3=Color3.fromRGB(55,60,75); HideBtn.Parent=Header; Instance.new("UICorner",HideBtn).CornerRadius=UDim.new(1,0); Instance.new("UIStroke",HideBtn).Transparency=.35
-
-local Sep=Instance.new("Frame"); Sep.BackgroundColor3=Color3.fromRGB(45,45,56); Sep.Size=UDim2.new(1,-24,0,1); Sep.Position=UDim2.fromOffset(12,56); Sep.BorderSizePixel=0; Sep.Parent=Main
+local HideBtn=Instance.new("TextButton"); HideBtn.AnchorPoint=Vector2.new(1,0); HideBtn.Position=UDim2.new(1,-12,0,14); HideBtn.Size=UDim2.fromOffset(34,34)
+HideBtn.Text="✕"; HideBtn.TextSize=18; HideBtn.Font=Enum.Font.GothamBold; HideBtn.TextColor3=THEME.text; HideBtn.AutoButtonColor=false
+HideBtn.BackgroundColor3=THEME.neutral; HideBtn.Parent=Header; Instance.new("UICorner",HideBtn).CornerRadius=UDim.new(1,0)
+local hbStroke=Instance.new("UIStroke",HideBtn); hbStroke.Transparency=.35
+HideBtn.MouseEnter:Connect(function() tween(HideBtn,.15,{BackgroundColor3=THEME.primaryA}):Play() end)
+HideBtn.MouseLeave:Connect(function() tween(HideBtn,.15,{BackgroundColor3=THEME.neutral}):Play() end)
 
 -- Content
-local Content=Instance.new("ScrollingFrame"); Content.Position=UDim2.fromOffset(12,68); Content.Size=UDim2.new(1,-24,1,-80)
+local Content=Instance.new("ScrollingFrame"); Content.Position=UDim2.fromOffset(16,76); Content.Size=UDim2.new(1,-32,1,-92)
 Content.CanvasSize=UDim2.new(0,0,0,0); Content.ScrollBarThickness=6; Content.BackgroundTransparency=1; Content.ScrollingDirection=Enum.ScrollingDirection.Y; Content.Parent=Main
 local VList=Instance.new("UIListLayout",Content); VList.Padding=UDim.new(0,12); VList.SortOrder=Enum.SortOrder.LayoutOrder
 local function refreshCanvas() Content.CanvasSize=UDim2.new(0,0,0,VList.AbsoluteContentSize.Y+8) end
 VList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshCanvas)
 
--- Helpers UI
-local function makeBadge(text)
-	local B=Instance.new("TextLabel"); B.BackgroundTransparency=1; B.Font=Enum.Font.GothamSemibold; B.TextSize=12
-	B.TextColor3=Color3.fromRGB(215,225,255); B.Text= text; B.Size=UDim2.fromOffset(160,16); return B
+-- ========= UI Helpers =========
+local function hoverGlow(btn, onColor, offColor)
+	btn.MouseEnter:Connect(function() tween(btn,.15,{BackgroundColor3=onColor}):Play() end)
+	btn.MouseLeave:Connect(function() tween(btn,.15,{BackgroundColor3=offColor}):Play() end)
 end
 
 local function makeCard(titleText, subtitleText, height, icon)
-	local Card=Instance.new("Frame"); Card.Size=UDim2.new(1,0,0,height); Card.BackgroundColor3=Color3.fromRGB(22,22,27); Card.BorderSizePixel=0; Card.Active=true; Card.Parent=Content
-	Instance.new("UICorner",Card).CornerRadius=UDim.new(0,12)
-	local s=Instance.new("UIStroke",Card); s.Thickness=1; s.Transparency=.22; s.Color=Color3.fromRGB(255,255,255)
+	local Card=Instance.new("Frame"); Card.Size=UDim2.new(1,0,0,height); Card.BackgroundColor3=THEME.card; Card.BorderSizePixel=0; Card.Active=true; Card.Parent=Content
+	Instance.new("UICorner",Card).CornerRadius=UDim.new(0,14)
+	local s=Instance.new("UIStroke",Card); s.Thickness=1; s.Transparency=.65; s.Color=THEME.stroke
+
+	-- Subtle top gradient + glow bar
+	local Top=Instance.new("Frame"); Top.BackgroundColor3=THEME.cardTop; Top.BorderSizePixel=0; Top.Size=UDim2.new(1,0,0,44); Top.Parent=Card
+	Instance.new("UICorner",Top).CornerRadius=UDim.new(0,14)
+	local Accent=Instance.new("Frame"); Accent.Size=UDim2.new(0,3,0,3); Accent.Position=UDim2.fromOffset(12,40); Accent.BackgroundColor3=THEME.accentBar; Accent.Parent=Card
+	Instance.new("UICorner",Accent).CornerRadius=UDim.new(1,0)
 
 	local T=Instance.new("TextLabel"); T.BackgroundTransparency=1; T.Font=Enum.Font.GothamSemibold; T.TextSize=16; T.TextXAlignment=Enum.TextXAlignment.Left
-	T.TextColor3=Color3.fromRGB(235,240,255); T.Text=(icon and (icon.."  ") or "")..titleText; T.Position=UDim2.fromOffset(14,8); T.Size=UDim2.fromOffset(420,20); T.Parent=Card
+	T.TextColor3=THEME.text; T.Text=(icon and (icon.."  ") or "")..titleText; T.Position=UDim2.fromOffset(14,10); T.Size=UDim2.fromOffset(440,20); T.Parent=Card
 
 	local ST=Instance.new("TextLabel"); ST.BackgroundTransparency=1; ST.Font=Enum.Font.Gotham; ST.TextSize=13; ST.TextXAlignment=Enum.TextXAlignment.Left
-	ST.TextColor3=Color3.fromRGB(170,175,190); ST.Text=subtitleText or ""; ST.Position=UDim2.fromOffset(14,30); ST.Size=UDim2.fromOffset(520,18); ST.Parent=Card
+	ST.TextColor3=THEME.muted; ST.Text=subtitleText or ""; ST.Position=UDim2.fromOffset(14,52); ST.Size=UDim2.fromOffset(520,18); ST.Parent=Card
 
 	return Card
 end
 
 local function makeToggle(parent, defaultOn, xOff)
-	local Btn=Instance.new("TextButton"); Btn.AutoButtonColor=false; Btn.AnchorPoint=Vector2.new(1,0); Btn.Position=UDim2.new(1,-(xOff or 10),0,8)
-	Btn.Size=UDim2.fromOffset(68,28); Btn.BackgroundColor3= defaultOn and Color3.fromRGB(68,205,128) or Color3.fromRGB(64,66,80); Btn.Text=""; Btn.Parent=parent
-	Instance.new("UICorner",Btn).CornerRadius=UDim.new(1,0); local s=Instance.new("UIStroke",Btn); s.Thickness=1; s.Transparency=.2; s.Color=Color3.fromRGB(255,255,255)
-	local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(26,26); Knob.Position= defaultOn and UDim2.fromOffset(40,1) or UDim2.fromOffset(2,1); Knob.BackgroundColor3=Color3.fromRGB(240,240,245); Knob.Parent=Btn
+	local Btn=Instance.new("TextButton"); Btn.AutoButtonColor=false; Btn.AnchorPoint=Vector2.new(1,0); Btn.Position=UDim2.new(1,-(xOff or 12),0,8)
+	Btn.Size=UDim2.fromOffset(72,30); Btn.BackgroundColor3= defaultOn and THEME.success or THEME.neutral; Btn.Text=""; Btn.Parent=parent
+	Instance.new("UICorner",Btn).CornerRadius=UDim.new(1,0)
+	local s=Instance.new("UIStroke",Btn); s.Thickness=1; s.Transparency=.25
+	local glow=Instance.new("ImageLabel"); glow.BackgroundTransparency=1; glow.Image="rbxassetid://5028857084"; glow.ImageColor3=defaultOn and THEME.success or THEME.neutral
+	glow.ImageTransparency=.6; glow.ScaleType=Enum.ScaleType.Slice; glow.SliceCenter=Rect.new(24,24,276,276); glow.Size=UDim2.new(1,20,1,20); glow.Position=UDim2.fromOffset(-10,-10); glow.Parent=Btn
+
+	local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(28,28); Knob.Position= defaultOn and UDim2.fromOffset(42,1) or UDim2.fromOffset(2,1); Knob.BackgroundColor3=Color3.fromRGB(245,246,250); Knob.Parent=Btn
 	Instance.new("UICorner",Knob).CornerRadius=UDim.new(1,0)
+	local kStroke=Instance.new("UIStroke",Knob); kStroke.Transparency=.35
+
 	local function setOn(on)
-		tween(Btn,.15,{BackgroundColor3= on and Color3.fromRGB(68,205,128) or Color3.fromRGB(64,66,80)}):Play()
-		tween(Knob,.15,{Position= on and UDim2.fromOffset(40,1) or UDim2.fromOffset(2,1)}):Play()
+		local c = on and THEME.success or THEME.neutral
+		tween(Btn,.16,{BackgroundColor3=c}):Play()
+		tween(glow,.2,{ImageColor3=c}):Play()
+		tween(Knob,.16,{Position= on and UDim2.fromOffset(42,1) or UDim2.fromOffset(2,1)}):Play()
 	end
+	hoverGlow(Btn, defaultOn and THEME.success or Color3.fromRGB(80,84,104), defaultOn and THEME.success or THEME.neutral)
 	return Btn,setOn
 end
 
 local function makeSlider(parent, title, minV, maxV, defaultV, yOff, onChanged, valueFmt)
-	local Wrap=Instance.new("Frame"); Wrap.BackgroundTransparency=1; Wrap.Position=UDim2.fromOffset(14,yOff or 56); Wrap.Size=UDim2.new(1,-28,0,62); Wrap.Parent=parent
+	local Wrap=Instance.new("Frame"); Wrap.BackgroundTransparency=1; Wrap.Position=UDim2.fromOffset(14,(yOff or 80)); Wrap.Size=UDim2.new(1,-28,0,66); Wrap.Parent=parent
 	local function fmt(v) return valueFmt and valueFmt(v) or tostring(v) end
-	local T=Instance.new("TextLabel"); T.BackgroundTransparency=1; T.Font=Enum.Font.Gotham; T.TextSize=14; T.TextXAlignment=Enum.TextXAlignment.Left; T.TextColor3=Color3.fromRGB(205,210,225)
-	T.Text=string.format("%s: %s",title,fmt(defaultV)); T.Position=UDim2.fromOffset(0,0); T.Size=UDim2.fromOffset(360,18); T.Parent=Wrap
-	local Bar=Instance.new("Frame"); Bar.BackgroundColor3=Color3.fromRGB(48,50,65); Bar.BorderSizePixel=0; Bar.Position=UDim2.fromOffset(0,26); Bar.Size=UDim2.new(1,0,0,8); Bar.Parent=Wrap
-	Instance.new("UICorner",Bar).CornerRadius=UDim.new(0,6)
-	local Fill=Instance.new("Frame"); Fill.BackgroundColor3=Color3.fromRGB(120,170,255); Fill.BorderSizePixel=0; Fill.Size=UDim2.fromOffset(0,8); Fill.Parent=Bar
+	local T=Instance.new("TextLabel"); T.BackgroundTransparency=1; T.Font=Enum.Font.Gotham; T.TextSize=14; T.TextXAlignment=Enum.TextXAlignment.Left; T.TextColor3=THEME.text
+	T.Text=string.format("%s: %s",title,fmt(defaultV)); T.Position=UDim2.fromOffset(0,0); T.Size=UDim2.fromOffset(380,18); T.Parent=Wrap
+
+	local Track=Instance.new("Frame"); Track.BackgroundColor3=Color3.fromRGB(46,50,65); Track.BorderSizePixel=0; Track.Position=UDim2.fromOffset(0,28); Track.Size=UDim2.new(1,0,0,10); Track.Parent=Wrap
+	Instance.new("UICorner",Track).CornerRadius=UDim.new(0,6)
+	local Fill=Instance.new("Frame"); Fill.BackgroundColor3=THEME.primaryA; Fill.BorderSizePixel=0; Fill.Size=UDim2.fromOffset(0,10); Fill.Parent=Track
 	Instance.new("UICorner",Fill).CornerRadius=UDim.new(0,6)
-	local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(14,14); Knob.Position=UDim2.fromOffset(-7,-3); Knob.BackgroundColor3=Color3.fromRGB(240,240,245); Knob.Parent=Fill
+	local grad=Instance.new("UIGradient",Fill); grad.Rotation=15; grad.Color=ColorSequence.new(THEME.primaryA, THEME.primaryB)
+
+	local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(16,16); Knob.Position=UDim2.fromOffset(-8,-3); Knob.BackgroundColor3=Color3.fromRGB(245,246,250); Knob.Parent=Fill
 	Instance.new("UICorner",Knob).CornerRadius=UDim.new(1,0)
+	local hover=Instance.new("UIStroke",Knob); hover.Transparency=.35
+
 	local dragging=false
 	local function setFromX(px)
-		local abs=Bar.AbsoluteSize.X; local rel=math.clamp(px/abs,0,1)
+		local abs=Track.AbsoluteSize.X; local rel=math.clamp(px/abs,0,1)
 		local val=math.floor(minV + (maxV-minV)*rel + .5)
 		local w=math.floor(abs*rel + .5)
-		Fill.Size=UDim2.fromOffset(w,8); Knob.Position=UDim2.fromOffset(w-7,-3)
+		Fill.Size=UDim2.fromOffset(w,10); Knob.Position=UDim2.fromOffset(w-8,-3)
 		T.Text=string.format("%s: %s",title,fmt(val))
 		if onChanged then onChanged(val) end
 	end
-	RS.Heartbeat:Wait(); local rel=(defaultV-minV)/(maxV-minV); setFromX(Bar.AbsoluteSize.X*rel)
-	Bar.InputBegan:Connect(function(io) if io.UserInputType==Enum.UserInputType.MouseButton1 or io.UserInputType==Enum.UserInputType.Touch then dragging=true; setFromX(io.Position.X-Bar.AbsolutePosition.X) end end)
-	UIS.InputChanged:Connect(function(io) if dragging and (io.UserInputType==Enum.UserInputType.MouseMovement or io.UserInputType==Enum.UserInputType.Touch) then setFromX(io.Position.X-Bar.AbsolutePosition.X) end end)
+	RS.Heartbeat:Wait(); local rel=(defaultV-minV)/(maxV-minV); setFromX(Track.AbsoluteSize.X*rel)
+	Track.InputBegan:Connect(function(io) if io.UserInputType==Enum.UserInputType.MouseButton1 or io.UserInputType==Enum.UserInputType.Touch then dragging=true; setFromX(io.Position.X-Track.AbsolutePosition.X) end end)
+	UIS.InputChanged:Connect(function(io) if dragging and (io.UserInputType==Enum.UserInputType.MouseMovement or io.UserInputType==Enum.UserInputType.Touch) then setFromX(io.Position.X-Track.AbsolutePosition.X) end end)
 	UIS.InputEnded:Connect(function(io) if io.UserInputType==Enum.UserInputType.MouseButton1 or io.UserInputType==Enum.UserInputType.Touch then dragging=false end end)
-	return { set=function(v) v=math.clamp(v,minV,maxV); local r=(v-minV)/(maxV-minV); setFromX(Bar.AbsoluteSize.X*r) end }
+	return { set=function(v) v=math.clamp(v,minV,maxV); local r=(v-minV)/(maxV-minV); setFromX(Track.AbsoluteSize.X*r) end }
 end
 
--- ========= Speed =========
+-- ========= LOGIC: Speed =========
 local function speed_enable()
 	S.humanoid = getHum()
 	S.normalSpeed = S.humanoid.WalkSpeed
@@ -214,98 +240,61 @@ local function speed_disable()
 end
 LP.CharacterAdded:Connect(function() if S.speedOn then task.wait(.3); speed_enable() end end)
 
--- ========= Fly (sortie propre) =========
+-- ========= LOGIC: Fly (sortie propre) =========
 local function fly_disable()
 	S.flyAlive=false; disconnectAll(S.flyConns)
 	if not S.flyData then return end
-
-	local hrp = S.flyData.hrp
-	local hum = S.flyData.humanoid
-	local Controls = S.flyData.Controls
-	local collMap = S.flyData.collMap
-
+	local hrp=S.flyData.hrp; local hum=S.flyData.humanoid; local Controls=S.flyData.Controls; local collMap=S.flyData.collMap
 	pcall(function() if S.flyData.lv then S.flyData.lv.Enabled=false; S.flyData.lv:Destroy() end end)
 	pcall(function() if S.flyData.att then S.flyData.att:Destroy() end end)
-
 	if collMap then for part,can in pairs(collMap) do if part and part.Parent then part.CanCollide=can end end end
-
-	if hrp then
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-		hrp.CFrame = hrp.CFrame + Vector3.new(0,0.05,0)
-	end
-
+	if hrp then hrp.AssemblyLinearVelocity=Vector3.zero; hrp.AssemblyAngularVelocity=Vector3.zero; hrp.CFrame=hrp.CFrame + Vector3.new(0,0.05,0) end
 	if Controls then pcall(function() Controls:Enable() end) end
 	if hum then
-		hum.AutoRotate=true
-		hum.PlatformStand=false
-		hum.Sit=false
+		hum.AutoRotate=true; hum.PlatformStand=false; hum.Sit=false
 		pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed) end)
 		pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
-		task.delay(0.05,function()
-			if hum and hum.Parent then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end) end
-		end)
+		task.delay(0.05,function() if hum and hum.Parent then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end) end end)
 	end
 	S.flyData=nil
 end
-
 local function fly_enable()
 	fly_disable()
 	local char=getChar(); local hrp=char:WaitForChild("HumanoidRootPart"); local hum=char:WaitForChild("Humanoid")
 	S.flyAlive=true
-
 	local Controls=nil
-	pcall(function()
-		local ps=LP:WaitForChild("PlayerScripts")
-		local ok,PlayerModule=pcall(function() return require(ps:WaitForChild("PlayerModule")) end)
-		if ok and PlayerModule then
-			Controls = PlayerModule:GetControls()
-			if Controls then Controls:Disable() end
-		end
-	end)
-
-	hum.AutoRotate=false
-	hum:ChangeState(Enum.HumanoidStateType.Physics)
-	hum.PlatformStand=true
-
+	pcall(function() local ps=LP:WaitForChild("PlayerScripts"); local ok,PlayerModule=pcall(function() return require(ps:WaitForChild("PlayerModule")) end); if ok and PlayerModule then Controls=PlayerModule:GetControls(); if Controls then Controls:Disable() end end end)
+	hum.AutoRotate=false; hum:ChangeState(Enum.HumanoidStateType.Physics); hum.PlatformStand=true
 	local collMap={}; for _,d in ipairs(char:GetDescendants()) do if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end end
 	table.insert(S.flyConns, char.DescendantAdded:Connect(function(d) if d:IsA("BasePart") then collMap[d]=d.CanCollide; d.CanCollide=false end end))
-
 	local att=Instance.new("Attachment"); att.Parent=hrp
 	local lv=Instance.new("LinearVelocity"); lv.Attachment0=att; lv.MaxForce=math.huge; lv.RelativeTo=Enum.ActuatorRelativeTo.World; lv.Parent=hrp
 	S.flyData={hrp=hrp,humanoid=hum,lv=lv,att=att,Controls=Controls,collMap=collMap}
-
 	table.insert(S.flyConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function() if S.flyAlive and hum.PlatformStand~=true then hum.PlatformStand=true end end))
 	table.insert(S.flyConns, RS.Stepped:Connect(function() if S.flyAlive then hrp.AssemblyAngularVelocity=Vector3.zero end end))
 	task.spawn(function() while S.flyAlive and char.Parent do if hum.AutoRotate~=false then hum.AutoRotate=false end if not att.Parent then att.Parent=hrp end if not lv.Parent then lv.Parent=hrp end task.wait(0.05) end end)
-
 	table.insert(S.flyConns, RS.RenderStepped:Connect(function()
 		if not S.flyAlive then return end
 		local cam=workspace.CurrentCamera; if not cam then return end
-
 		local look=cam.CFrame.LookVector
 		local yawDir=Vector3.new(look.X,0,look.Z); if yawDir.Magnitude<1e-3 then yawDir=Vector3.zAxis else yawDir=yawDir.Unit end
 		hrp.CFrame=CFrame.lookAt(hrp.Position, hrp.Position+yawDir, Vector3.yAxis)
-
 		local rightDir=Vector3.new(cam.CFrame.RightVector.X,0,cam.CFrame.RightVector.Z)
 		rightDir=(rightDir.Magnitude>0) and rightDir.Unit or Vector3.new(-yawDir.Z,0,yawDir.X)
-
 		local fwd,right=0,0
 		if UIS:IsKeyDown(Enum.KeyCode.W) then fwd += 1 end
 		if UIS:IsKeyDown(Enum.KeyCode.S) then fwd -= 1 end
 		if UIS:IsKeyDown(Enum.KeyCode.D) then right += 1 end
 		if UIS:IsKeyDown(Enum.KeyCode.A) then right -= 1 end
-
 		local SPEED,VERTICAL,PITCH_DEADZONE=65,45,0.08
 		local horiz=yawDir*fwd + rightDir*right; if horiz.Magnitude>0 then horiz=horiz.Unit*SPEED else horiz=Vector3.zero end
 		local vertical=0; if fwd~=0 then local pitch=look.Y; if math.abs(pitch)>PITCH_DEADZONE then vertical=pitch*VERTICAL*fwd end end
 		lv.VectorVelocity=Vector3.new(horiz.X,vertical,horiz.Z)
 	end))
-
 	table.insert(S.flyConns, hum.Died:Connect(fly_disable))
 end
 
--- ========= Light =========
+-- ========= LOGIC: Light =========
 local LIGHT_PRESET={GlobalShadows=false, FogEnd=100000, Brightness=2, Ambient=Color3.fromRGB(150,150,150)}
 local function light_enable()
 	if not S.lightBackup then S.lightBackup={GlobalShadows=Lighting.GlobalShadows, FogEnd=Lighting.FogEnd, Brightness=Lighting.Brightness, Ambient=Lighting.Ambient} end
@@ -315,7 +304,7 @@ local function light_disable()
 	if S.lightBackup then Lighting.GlobalShadows=S.lightBackup.GlobalShadows; Lighting.FogEnd=S.lightBackup.FogEnd; Lighting.Brightness=S.lightBackup.Brightness; Lighting.Ambient=S.lightBackup.Ambient end
 end
 
--- ========= ESP (aura + box + pseudo + distance) =========
+-- ========= LOGIC: ESP =========
 local ROLE_COLORS = {
 	Murder=Color3.fromRGB(255,60,60), Murderer=Color3.fromRGB(255,60,60),
 	Innocent=Color3.fromRGB(64,128,255),
@@ -333,104 +322,39 @@ local function colorFor(p,char)
 	if p.Team and p.Team.TeamColor then return p.Team.TeamColor.Color end
 	return DEFAULT_COLOR
 end
+local function getHeadOrPart(char) return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart") end
 
-local function getHeadOrPart(char)
-	return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart")
-end
-
--- Registre ESP
 local ESP_REG = {} -- [Player] = {char, head, hl, box, bb, nameLbl, distLbl, lastName, lastDist, lastColor, conns}
-
-local function clearBillboards(char)
-	for _,d in ipairs(char:GetDescendants()) do
-		if d:IsA("BillboardGui") and d.Name=="ESP_BBG" then d:Destroy() end
-	end
-end
 
 local function buildESPFor(p, char)
 	if not char or p==LP then return end
 	local reg = ESP_REG[p]
 	if not reg then reg={conns={}}; ESP_REG[p]=reg else disconnectAll(reg.conns) end
-	reg.char=char
+	reg.char=char; reg.head=getHeadOrPart(char)
 
-	-- Head/Adornee
-	local head = getHeadOrPart(char)
-	reg.head = head
-
-	-- Highlight (aura)
+	-- Aura
 	local hl = char:FindFirstChild("ESP_Highlight")
-	if not hl then
-		hl = Instance.new("Highlight")
-		hl.Name = "ESP_Highlight"
-		hl.FillTransparency = 1      -- aura contour only (perf-friendly)
-		hl.OutlineTransparency = 0
-		hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-		hl.Parent = char
-	end
+	if not hl then hl=Instance.new("Highlight"); hl.Name="ESP_Highlight"; hl.FillTransparency=1; hl.OutlineTransparency=0; hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent=char end
 	reg.hl = hl
 
-	-- SelectionBox (box 3D)
+	-- Box
 	local box = char:FindFirstChild("ESP_Box")
-	if not box then
-		box = Instance.new("SelectionBox")
-		box.Name = "ESP_Box"
-		box.LineThickness = 0.02
-		box.SurfaceTransparency = 1
-		box.Adornee = char
-		box.Parent = char
-	end
+	if not box then box=Instance.new("SelectionBox"); box.Name="ESP_Box"; box.LineThickness=0.02; box.SurfaceTransparency=1; box.Adornee=char; box.Parent=char end
 	reg.box = box
 
-	-- Billboard (pseudo + distance) — IMPORTANT : parent sur une BasePart (Head/HRP)
-	clearBillboards(char)
-	local bb = Instance.new("BillboardGui")
-	bb.Name = "ESP_BBG"
-	bb.Size = UDim2.new(0, 220, 0, 44)
-	bb.StudsOffset = Vector3.new(0, 3, 0)
-	bb.AlwaysOnTop = true
-	bb.MaxDistance = 5000
-	if head and head:IsA("BasePart") then
-		bb.Parent = head
-	else
-		-- fallback : HRP
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		bb.Parent = hrp or char
-	end
+	-- Billboard (parenté Head/HRP)
+	for _,d in ipairs(char:GetDescendants()) do if d:IsA("BillboardGui") and d.Name=="ESP_BBG" then d:Destroy() end end
+	local bb=Instance.new("BillboardGui"); bb.Name="ESP_BBG"; bb.Size=UDim2.new(0,220,0,44); bb.StudsOffset=Vector3.new(0,3,0); bb.AlwaysOnTop=true; bb.MaxDistance=5000
+	local head = reg.head
+	if head and head:IsA("BasePart") then bb.Parent=head else bb.Parent=(char:FindFirstChild("HumanoidRootPart") or char) end
+	local nameLbl=Instance.new("TextLabel"); nameLbl.Name="Name"; nameLbl.BackgroundTransparency=1; nameLbl.Size=UDim2.new(1,0,0.5,0); nameLbl.Font=Enum.Font.GothamBold; nameLbl.TextScaled=true; nameLbl.TextStrokeTransparency=.5; nameLbl.Parent=bb
+	local distLbl=Instance.new("TextLabel"); distLbl.Name="Dist"; distLbl.BackgroundTransparency=1; distLbl.Position=UDim2.new(0,0,0.5,0); distLbl.Size=UDim2.new(1,0,0.5,0); distLbl.Font=Enum.Font.Gotham; distLbl.TextScaled=true; distLbl.TextStrokeTransparency=.5; distLbl.Parent=bb
+	reg.bb, reg.nameLbl, reg.distLbl = bb, nameLbl, distLbl; reg.lastName=""; reg.lastDist=-1; reg.lastColor=nil
 
-	local nameLbl = Instance.new("TextLabel")
-	nameLbl.Name = "Name"
-	nameLbl.BackgroundTransparency = 1
-	nameLbl.Size = UDim2.new(1, 0, 0.5, 0)
-	nameLbl.Font = Enum.Font.GothamBold
-	nameLbl.TextScaled = true
-	nameLbl.TextStrokeTransparency = 0.5
-	nameLbl.TextColor3 = Color3.fromRGB(255,255,255)
-	nameLbl.Parent = bb
-
-	local distLbl = Instance.new("TextLabel")
-	distLbl.Name = "Dist"
-	distLbl.BackgroundTransparency = 1
-	distLbl.Position = UDim2.new(0, 0, 0.5, 0)
-	distLbl.Size = UDim2.new(1, 0, 0.5, 0)
-	distLbl.Font = Enum.Font.Gotham
-	distLbl.TextScaled = true
-	distLbl.TextStrokeTransparency = 0.5
-	distLbl.TextColor3 = Color3.fromRGB(230,230,235)
-	distLbl.Parent = bb
-
-	reg.bb, reg.nameLbl, reg.distLbl = bb, nameLbl, distLbl
-	reg.lastName, reg.lastDist, reg.lastColor = "", -1, nil
-
-	-- Suivre nouveau Head si recréé
 	table.insert(reg.conns, char.DescendantAdded:Connect(function(d)
-		if d.Name=="Head" and d:IsA("BasePart") then
-			if reg.bb and reg.bb.Parent ~= d then reg.bb.Parent = d end
-			reg.head = d
-		end
+		if d.Name=="Head" and d:IsA("BasePart") and reg.bb and reg.bb.Parent~=d then reg.bb.Parent=d end
 	end))
-	table.insert(reg.conns, char.AncestryChanged:Connect(function(_, parent)
-		if parent==nil then disconnectAll(reg.conns) end
-	end))
+	table.insert(reg.conns, char.AncestryChanged:Connect(function(_,parent) if parent==nil then disconnectAll(reg.conns) end end))
 end
 
 local function ensureESPFor(p)
@@ -451,55 +375,28 @@ local function esp_update()
 	for _,p in ipairs(Players:GetPlayers()) do
 		if p~=LP then
 			ensureESPFor(p)
-			local reg=ESP_REG[p]
-			local char=p.Character
-			if not (reg and char and reg.bb and reg.hl and reg.box) then
-				-- rien à faire
-			else
+			local reg=ESP_REG[p]; local char=p.Character
+			if reg and char and reg.bb and reg.hl and reg.box then
 				local tHRP = char:FindFirstChild("HumanoidRootPart")
-				if not tHRP then
-					reg.bb.Enabled=false; reg.hl.Enabled=false; reg.box.Visible=false
-				else
+				if not tHRP then reg.bb.Enabled=false; reg.hl.Enabled=false; reg.box.Visible=false else
 					local dist=(myHRP.Position - tHRP.Position).Magnitude
 					if dist > S.espMaxDist then
 						reg.bb.Enabled=false; reg.hl.Enabled=false; reg.box.Visible=false
 					else
-						-- Couleurs dynamiques
-						local col = colorFor(p,char)
-						if not sameColor(reg.lastColor, col) then
-							reg.lastColor = col
-							reg.hl.OutlineColor = col
-							pcall(function() reg.box.LineColor3 = col end)
-							pcall(function() reg.box.Color3 = col end) -- compat
-							reg.nameLbl.TextColor3 = col
-							reg.distLbl.TextColor3 = col
+						local col=colorFor(p,char)
+						if not sameColor(reg.lastColor,col) then
+							reg.lastColor=col
+							reg.hl.OutlineColor=col
+							pcall(function() reg.box.LineColor3=col end); pcall(function() reg.box.Color3=col end)
+							reg.nameLbl.TextColor3=col; reg.distLbl.TextColor3=col
 						end
-
-						-- Pseudo
-						local display = (p.DisplayName and p.DisplayName ~= "") and p.DisplayName or p.Name
-						local wantName = S.espShowUsername and (display.." (@"..p.Name..")") or display
-						if reg.lastName ~= wantName then
-							reg.nameLbl.Text = wantName
-							reg.lastName = wantName
-						end
-
-						-- Distance
-						local di = (dist >= 0) and math.floor(dist + 0.5) or 0
-						if reg.lastDist ~= di then
-							reg.distLbl.Text = tostring(di).." studs"
-							reg.lastDist = di
-						end
-
-						-- Afficher
-						reg.bb.Enabled = true
-						reg.hl.Enabled = true
-						reg.box.Visible = true
-
-						-- S'assure que le billboard reste sur un BasePart
-						if reg.bb.Parent == reg.char or (not reg.bb.Parent) or (not reg.bb.Parent.Parent) then
-							local h = getHeadOrPart(char)
-							if h then reg.bb.Parent = h end
-						end
+						local display=(p.DisplayName and p.DisplayName~="") and p.DisplayName or p.Name
+						local wantName=S.espShowUsername and (display.." (@"..p.Name..")") or display
+						if reg.lastName~=wantName then reg.nameLbl.Text=wantName; reg.lastName=wantName end
+						local di=(dist>=0) and math.floor(dist+0.5) or 0
+						if reg.lastDist~=di then reg.distLbl.Text=tostring(di).." studs"; reg.lastDist=di end
+						reg.bb.Enabled=true; reg.hl.Enabled=true; reg.box.Visible=true
+						if reg.bb.Parent==reg.char or (not reg.bb.Parent) or (not reg.bb.Parent.Parent) then local h=getHeadOrPart(char); if h then reg.bb.Parent=h end end
 					end
 				end
 			end
@@ -511,42 +408,23 @@ local function esp_enable()
 	if S.espConn then return end
 	for _,pl in ipairs(Players:GetPlayers()) do if pl~=LP and pl.Character then buildESPFor(pl, pl.Character) end end
 	local acc=0
-	S.espConn = RS.Heartbeat:Connect(function(dt)
-		acc += dt
-		if acc >= (1/math.max(1,S.espHz)) then
-			esp_update()
-			acc = 0
-		end
-	end)
-	Players.PlayerAdded:Connect(function(p)
-		p.CharacterAdded:Connect(function(c) task.wait(0.2); buildESPFor(p,c) end)
-		if p.Character then buildESPFor(p,p.Character) end
-	end)
+	S.espConn = RS.Heartbeat:Connect(function(dt) acc += dt; if acc >= (1/math.max(1,S.espHz)) then esp_update(); acc=0 end end)
+	Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(function(c) task.wait(0.2); buildESPFor(p,c) end); if p.Character then buildESPFor(p,p.Character) end end)
 end
 local function esp_disable()
 	disconnect(S.espConn); S.espConn=nil
-	for _,reg in pairs(ESP_REG) do
-		if reg.bb then reg.bb.Enabled=false end
-		if reg.hl then reg.hl.Enabled=false end
-		if reg.box then reg.box.Visible=false end
-	end
+	for _,reg in pairs(ESP_REG) do if reg.bb then reg.bb.Enabled=false end; if reg.hl then reg.hl.Enabled=false end; if reg.box then reg.box.Visible=false end end
 end
 
--- ========= Hitbox =========
+-- ========= LOGIC: Hitbox =========
 local function rememberHRP(hrp)
 	if not hrp or S.hitboxOrig[hrp] then return end
-	S.hitboxOrig[hrp] = {
-		Size = hrp.Size,
-		Transparency = hrp.Transparency,
-		Material = hrp.Material,
-		CanCollide = hrp.CanCollide,
-		BrickColor = hrp.BrickColor,
-	}
+	S.hitboxOrig[hrp] = { Size=hrp.Size, Transparency=hrp.Transparency, Material=hrp.Material, CanCollide=hrp.CanCollide, BrickColor=hrp.BrickColor }
 end
 local function applyHitboxTo(hrp)
 	if not hrp then return end
 	rememberHRP(hrp)
-	hrp.Size = Vector3.new(S.hitboxSize, S.hitboxSize, S.hitboxSize)
+	hrp.Size = Vector3.new(S.hitboxSize,S.hitboxSize,S.hitboxSize)
 	hrp.Transparency = 0.7
 	hrp.BrickColor = BrickColor.new("Really red")
 	hrp.Material = Enum.Material.Neon
@@ -556,44 +434,24 @@ local function restoreAllHitbox()
 	for hrp,orig in pairs(S.hitboxOrig) do
 		if hrp and hrp.Parent and orig then
 			pcall(function()
-				hrp.Size = orig.Size
-				hrp.Transparency = orig.Transparency
-				hrp.Material = orig.Material
-				hrp.CanCollide = orig.CanCollide
-				hrp.BrickColor = orig.BrickColor
+				hrp.Size=orig.Size; hrp.Transparency=orig.Transparency; hrp.Material=orig.Material; hrp.CanCollide=orig.CanCollide; hrp.BrickColor=orig.BrickColor
 			end)
 		end
 	end
 	S.hitboxOrig = {}
 end
 local function hitbox_loop()
-	for _,pl in ipairs(Players:GetPlayers()) do
-		if pl ~= LP and pl.Character then
-			local hrp = pl.Character:FindFirstChild("HumanoidRootPart")
-			if hrp then pcall(applyHitboxTo, hrp) end
-		end
-	end
+	for _,pl in ipairs(Players:GetPlayers()) do if pl ~= LP and pl.Character then local hrp = pl.Character:FindFirstChild("HumanoidRootPart"); if hrp then pcall(applyHitboxTo, hrp) end end end
 end
 local function hitbox_enable()
 	if S.hitboxConn then return end
 	hitbox_loop()
-	S.hitboxConn = RS.RenderStepped:Connect(function()
-		if S.hitboxOn then hitbox_loop() end
-	end)
-	Players.PlayerAdded:Connect(function(p)
-		p.CharacterAdded:Connect(function(c)
-			task.wait(0.1)
-			local hrp = c:FindFirstChild("HumanoidRootPart")
-			if hrp then rememberHRP(hrp) end
-		end)
-	end)
+	S.hitboxConn = RS.RenderStepped:Connect(function() if S.hitboxOn then hitbox_loop() end end)
+	Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(function(c) task.wait(0.1); local hrp=c:FindFirstChild("HumanoidRootPart"); if hrp then rememberHRP(hrp) end end) end)
 end
-local function hitbox_disable()
-	disconnect(S.hitboxConn); S.hitboxConn=nil
-	restoreAllHitbox()
-end
+local function hitbox_disable() disconnect(S.hitboxConn); S.hitboxConn=nil; restoreAllHitbox() end
 
--- ========= NoClip =========
+-- ========= LOGIC: NoClip =========
 local function noclip_cachePart(inst) if inst:IsA("BasePart") and S.noclipOriginal[inst]==nil then S.noclipOriginal[inst]=inst.CanCollide end end
 local function noclip_cacheChar(char) for _,d in ipairs(char:GetDescendants()) do noclip_cachePart(d) end; disconnect(S.noclipDesc); S.noclipDesc=char.DescendantAdded:Connect(noclip_cachePart) end
 local function noclip_apply(char) for part,_ in pairs(S.noclipOriginal) do if part.Parent and part:IsDescendantOf(char) then part.CanCollide=false end end end
@@ -601,7 +459,7 @@ local function noclip_enable() local char=getChar(); S.noclipOriginal={}; noclip
 local function noclip_disable() disconnect(S.noclipStep); S.noclipStep=nil; disconnect(S.noclipDesc); S.noclipDesc=nil; for part,can in pairs(S.noclipOriginal) do if part and part.Parent then part.CanCollide=can end end; S.noclipOriginal={} end
 LP.CharacterAdded:Connect(function(c) if S.noclipOn then noclip_enable() end end)
 
--- ========= Infinite Jump =========
+-- ========= LOGIC: Infinite Jump =========
 local function ij_bind(char)
 	local hum=char:WaitForChild("Humanoid"); local root=char:WaitForChild("HumanoidRootPart")
 	hum.UseJumpPower=true
@@ -627,79 +485,72 @@ local function tpToPlayerId(userId)
 end
 local function listOthers() local arr={}; for _,p in ipairs(Players:GetPlayers()) do if p~=LP then table.insert(arr,p) end end; table.sort(arr,function(a,b) local ad=(a.DisplayName~="" and a.DisplayName) or a.Name; local bd=(b.DisplayName~="" and b.DisplayName) or b.Name; return string.lower(ad) < string.lower(bd) end); return arr end
 
--- ========= Cartes =========
-
+-- ========= CARDS =========
 -- Speed
 do
-	local Card=makeCard("⚡ Speed","Maintient ta vitesse (anti-reset + respawn).",150)
+	local Card=makeCard("⚡ Speed","Maintient ta vitesse (anti-reset + respawn).",160)
 	local Toggle,setT=makeToggle(Card,false)
-	makeSlider(Card,"Vitesse",S.minSpeed,S.maxSpeed,S.speed,56,function(v) S.speed=v end)
+	makeSlider(Card,"Vitesse",S.minSpeed,S.maxSpeed,S.speed,88,function(v) S.speed=v end)
 	Toggle.MouseButton1Click:Connect(function() S.speedOn=not S.speedOn; setT(S.speedOn); if S.speedOn then speed_enable() else speed_disable() end end)
 end
 
 -- Fly
-do local Card=makeCard("🕊️ Fly","Vol fluide (WASD/ZQSD + inclinaison caméra) — sortie propre.",100); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("🕊️ Fly","Vol fluide (WASD/ZQSD + inclinaison caméra) — sortie propre.",112); local Toggle,setT=makeToggle(Card,false)
 	Toggle.MouseButton1Click:Connect(function() S.flyOn=not S.flyOn; setT(S.flyOn); if S.flyOn then fly_enable() else fly_disable() end end)
 end
 
 -- Light
-do local Card=makeCard("💡 Light","Désactive ombres, enlève brouillard, boost luminosité.",100); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("💡 Light","Désactive ombres, enlève brouillard, boost luminosité.",112); local Toggle,setT=makeToggle(Card,false)
 	Toggle.MouseButton1Click:Connect(function() S.lightOn=not S.lightOn; setT(S.lightOn); if S.lightOn then light_enable() else light_disable() end end)
 end
 
 -- ESP
 do
-	local Card=makeCard("🧭 ESP Player","Aura + boîte + pseudo + distance (couleurs par rôle/équipe, MAJ live).",170)
+	local Card=makeCard("🧭 ESP Player","Aura + boîte + pseudo + distance (rôle/équipe, MAJ live).",172)
 	local Toggle,setT=makeToggle(Card,false)
 
-	-- Row : single option @username
-	local Row=Instance.new("Frame"); Row.BackgroundTransparency=1; Row.Position=UDim2.fromOffset(14,56); Row.Size=UDim2.new(1,-28,0,28); Row.Parent=Card
-	local L=makeBadge("Option : Afficher @username"); L.Position=UDim2.fromOffset(0,6); L.Parent=Row
-	local Small,setSmall=makeToggle(Row,S.espShowUsername); Small.Position=UDim2.new(1,-58,0,2); Small.Size=UDim2.fromOffset(58,24)
+	local Row=Instance.new("Frame"); Row.BackgroundTransparency=1; Row.Position=UDim2.fromOffset(14,88); Row.Size=UDim2.new(1,-28,0,28); Row.Parent=Card
+	local L=Instance.new("TextLabel"); L.BackgroundTransparency=1; L.Font=Enum.Font.Gotham; L.TextSize=14; L.TextXAlignment=Enum.TextXAlignment.Left; L.TextColor3=THEME.muted
+	L.Text="Option : Afficher @username"; L.Position=UDim2.fromOffset(0,6); L.Size=UDim2.fromOffset(220,18); L.Parent=Row
+	local Small,setSmall=makeToggle(Row,S.espShowUsername); Small.Position=UDim2.new(1,-60,0,2); Small.Size=UDim2.fromOffset(60,24)
 	Small.MouseButton1Click:Connect(function() S.espShowUsername=not S.espShowUsername; setSmall(S.espShowUsername) end)
 
-	Toggle.MouseButton1Click:Connect(function()
-		S.espOn=not S.espOn; setT(S.espOn)
-		if S.espOn then esp_enable() else esp_disable() end
-	end)
+	Toggle.MouseButton1Click:Connect(function() S.espOn=not S.espOn; setT(S.espOn); if S.espOn then esp_enable() else esp_disable() end end)
 end
 
 -- Hitbox
 do
-	local Card=makeCard("🎯 Hitbox (HRP)","Agrandit le HumanoidRootPart des autres joueurs (client-side).",150)
+	local Card=makeCard("🎯 Hitbox (HRP)","Agrandit le HumanoidRootPart des autres joueurs (client-side).",160)
 	local Toggle,setT=makeToggle(Card,false)
-	makeSlider(Card,"Taille",2,30,S.hitboxSize,56,function(v) S.hitboxSize=v end)
-	Toggle.MouseButton1Click:Connect(function()
-		S.hitboxOn = not S.hitboxOn
-		setT(S.hitboxOn)
-		if S.hitboxOn then hitbox_enable() else hitbox_disable() end
-	end)
+	makeSlider(Card,"Taille",2,30,S.hitboxSize,88,function(v) S.hitboxSize=v end)
+	Toggle.MouseButton1Click:Connect(function() S.hitboxOn=not S.hitboxOn; setT(S.hitboxOn); if S.hitboxOn then hitbox_enable() else hitbox_disable() end end)
 end
 
 -- TP Player
 do
-	local Card=makeCard("🧭 TP Player","Choisis un joueur puis clique TP.",230)
-	local row=Instance.new("Frame"); row.BackgroundTransparency=1; row.Position=UDim2.fromOffset(14,58); row.Size=UDim2.new(1,-28,0,36); row.Parent=Card
+	local Card=makeCard("🧭 TP Player","Choisis un joueur puis clique TP.",240)
+	local row=Instance.new("Frame"); row.BackgroundTransparency=1; row.Position=UDim2.fromOffset(14,88); row.Size=UDim2.new(1,-28,0,36); row.Parent=Card
 	local uiList=Instance.new("UIListLayout",row); uiList.FillDirection=Enum.FillDirection.Horizontal; uiList.Padding=UDim.new(0,8)
 
-	local refreshBtn=Instance.new("TextButton"); refreshBtn.Size=UDim2.new(0,104,1,0); refreshBtn.Text="Refresh"; refreshBtn.Font=Enum.Font.GothamSemibold; refreshBtn.TextSize=14; refreshBtn.TextColor3=Color3.fromRGB(255,255,255)
-	refreshBtn.BackgroundColor3=Color3.fromRGB(60,130,255); refreshBtn.AutoButtonColor=true; refreshBtn.Parent=row; do local c=Instance.new("UICorner",refreshBtn) c.CornerRadius=UDim.new(0,8) end
+	local refreshBtn=Instance.new("TextButton"); refreshBtn.Size=UDim2.new(0,110,1,0); refreshBtn.Text="Refresh"; refreshBtn.Font=Enum.Font.GothamSemibold; refreshBtn.TextSize=14; refreshBtn.TextColor3=THEME.text
+	refreshBtn.BackgroundColor3=THEME.primaryA; refreshBtn.AutoButtonColor=true; refreshBtn.Parent=row; do local c=Instance.new("UICorner",refreshBtn) c.CornerRadius=UDim.new(0,8) end
+	hoverGlow(refreshBtn, THEME.primaryB, THEME.primaryA)
 
-	local dropdownBtn=Instance.new("TextButton"); dropdownBtn.Size=UDim2.new(1,-112,1,0); dropdownBtn.Text="Choisir un joueur  ▾"; dropdownBtn.Font=Enum.Font.Gotham; dropdownBtn.TextSize=14
-	dropdownBtn.TextColor3=Color3.fromRGB(235,235,240); dropdownBtn.BackgroundColor3=Color3.fromRGB(48,50,65); dropdownBtn.AutoButtonColor=true; dropdownBtn.Parent=row; do local c=Instance.new("UICorner",dropdownBtn) c.CornerRadius=UDim.new(0,8) end
+	local dropdownBtn=Instance.new("TextButton"); dropdownBtn.Size=UDim2.new(1,-118,1,0); dropdownBtn.Text="Choisir un joueur  ▾"; dropdownBtn.Font=Enum.Font.Gotham; dropdownBtn.TextSize=14
+	dropdownBtn.TextColor3=THEME.text; dropdownBtn.BackgroundColor3=Color3.fromRGB(48,50,65); dropdownBtn.AutoButtonColor=true; dropdownBtn.Parent=row; do local c=Instance.new("UICorner",dropdownBtn) c.CornerRadius=UDim.new(0,8) end
 
-	local listHolder=Instance.new("ScrollingFrame"); listHolder.Size=UDim2.new(1,-28,0,120); listHolder.Position=UDim2.fromOffset(14,100); listHolder.BackgroundColor3=Color3.fromRGB(40,42,56)
+	local listHolder=Instance.new("ScrollingFrame"); listHolder.Size=UDim2.new(1,-28,0,120); listHolder.Position=UDim2.fromOffset(14,130); listHolder.BackgroundColor3=Color3.fromRGB(40,42,56)
 	listHolder.BorderSizePixel=0; listHolder.ScrollBarThickness=6; listHolder.CanvasSize=UDim2.new(0,0,0,0); listHolder.Visible=false; listHolder.Parent=Card; do local c=Instance.new("UICorner",listHolder) c.CornerRadius=UDim.new(0,10) end
 	local listLayout=Instance.new("UIListLayout",listHolder); listLayout.Padding=UDim.new(0,6)
 	local listPad=Instance.new("UIPadding",listHolder); listPad.PaddingLeft=UDim.new(0,6); listPad.PaddingRight=UDim.new(0,6); listPad.PaddingTop=UDim.new(0,6); listPad.PaddingBottom=UDim.new(0,6)
 
 	local emptyLabel=Instance.new("TextLabel"); emptyLabel.Size=UDim2.new(1,-12,0,28); emptyLabel.BackgroundTransparency=1; emptyLabel.Text="Aucun autre joueur."
-	emptyLabel.Font=Enum.Font.Gotham; emptyLabel.TextSize=14; emptyLabel.TextColor3=Color3.fromRGB(200,200,205); emptyLabel.Visible=false; emptyLabel.Parent=listHolder
+	emptyLabel.Font=Enum.Font.Gotham; emptyLabel.TextSize=14; emptyLabel.TextColor3=THEME.muted; emptyLabel.Visible=false; emptyLabel.Parent=listHolder
 
-	local tpBtn=Instance.new("TextButton"); tpBtn.Size=UDim2.new(1,-28,0,36); tpBtn.Position=UDim2.fromOffset(14,230-36); tpBtn.Text="Se TP → (choisis un joueur)"
-	tpBtn.Font=Enum.Font.GothamSemibold; tpBtn.TextSize=15; tpBtn.TextColor3=Color3.fromRGB(255,255,255); tpBtn.BackgroundColor3=Color3.fromRGB(80,80,95); tpBtn.AutoButtonColor=true; tpBtn.Parent=Card
+	local tpBtn=Instance.new("TextButton"); tpBtn.Size=UDim2.new(1,-28,0,36); tpBtn.Position=UDim2.fromOffset(14,240-36); tpBtn.Text="Se TP → (choisis un joueur)"
+	tpBtn.Font=Enum.Font.GothamSemibold; tpBtn.TextSize=15; tpBtn.TextColor3=THEME.text; tpBtn.BackgroundColor3=Color3.fromRGB(80,80,95); tpBtn.AutoButtonColor=true; tpBtn.Parent=Card
 	do local c=Instance.new("UICorner",tpBtn) c.CornerRadius=UDim.new(0,10) end
-	local function setTPEnabled(on) tpBtn.Active=on; tpBtn.AutoButtonColor=on; tpBtn.BackgroundColor3= on and Color3.fromRGB(60,120,255) or Color3.fromRGB(80,80,95) end
+	local function setTPEnabled(on) tpBtn.Active=on; tpBtn.AutoButtonColor=on; tween(tpBtn,.15,{BackgroundColor3= on and THEME.primaryA or Color3.fromRGB(80,80,95)}):Play() end
 	setTPEnabled(false)
 
 	local function clearList() for _,ch in ipairs(listHolder:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end; emptyLabel.Visible=false end
@@ -711,8 +562,9 @@ do
 			for _,p in ipairs(others) do
 				local b=Instance.new("TextButton"); b.Size=UDim2.new(1,-12,0,30); b.TextXAlignment=Enum.TextXAlignment.Left
 				b.Text=string.format("%s  (@%s)", (p.DisplayName~="" and p.DisplayName) or p.Name, p.Name)
-				b.Font=Enum.Font.Gotham; b.TextSize=14; b.TextColor3=Color3.fromRGB(235,235,240); b.BackgroundColor3=Color3.fromRGB(56,58,72); b.AutoButtonColor=true; b.Parent=listHolder
+				b.Font=Enum.Font.Gotham; b.TextSize=14; b.TextColor3=THEME.text; b.BackgroundColor3=Color3.fromRGB(56,58,72); b.AutoButtonColor=true; b.Parent=listHolder
 				Instance.new("UICorner",b).CornerRadius=UDim.new(0,8)
+				hoverGlow(b, Color3.fromRGB(70,74,92), Color3.fromRGB(56,58,72))
 				b.MouseButton1Click:Connect(function()
 					S.tpSelectedUserId=p.UserId; S.tpSelectedLabel=(p.DisplayName~="" and p.DisplayName) or p.Name
 					dropdownBtn.Text="Cible : "..S.tpSelectedLabel.."  ▾"; tpBtn.Text="Se TP → "..S.tpSelectedLabel; setTPEnabled(true); listHolder.Visible=false
@@ -733,7 +585,7 @@ do
 end
 
 -- NoClip
-do local Card=makeCard("🧱 NoClip","Traverse les objets (réversible).",100); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("🧱 NoClip","Traverse les objets (réversible).",112); local Toggle,setT=makeToggle(Card,false)
 	Toggle.MouseButton1Click:Connect(function() S.noclipOn=not S.noclipOn; setT(S.noclipOn); if S.noclipOn then
 		local char=getChar(); S.noclipOriginal={}; for _,d in ipairs(char:GetDescendants()) do if d:IsA("BasePart") then S.noclipOriginal[d]=d.CanCollide end end
 		disconnect(S.noclipDesc); S.noclipDesc=char.DescendantAdded:Connect(function(inst) if inst:IsA("BasePart") then S.noclipOriginal[inst]=inst.CanCollide end end)
@@ -747,25 +599,17 @@ end
 LP.CharacterAdded:Connect(function() if S.noclipOn then noclip_enable() end end)
 
 -- Infinite Jump
-do local Card=makeCard("🦘 Infinite Jump","Saut infini (boost réglable).",150); local Toggle,setT=makeToggle(Card,false)
-	makeSlider(Card,"Boost Y",20,120,S.ijBoost,56,function(v) S.ijBoost=v end)
-	local function ij_bind(char)
-		local hum=char:WaitForChild("Humanoid"); local root=char:WaitForChild("HumanoidRootPart")
-		hum.UseJumpPower=true; disconnect(S.ijConn)
-		S.ijConn=UIS.JumpRequest:Connect(function()
-			if not S.ijOn then return end
-			if hum.Health<=0 or hum:GetState()==Enum.HumanoidStateType.Dead then return end
-			local v=root.AssemblyLinearVelocity
-			root.AssemblyLinearVelocity=Vector3.new(v.X, math.max(S.ijBoost,0), v.Z)
-			hum:ChangeState(Enum.HumanoidStateType.Jumping)
-		end)
+do local Card=makeCard("🦘 Infinite Jump","Saut infini (boost réglable).",160); local Toggle,setT=makeToggle(Card,false)
+	makeSlider(Card,"Boost Y",20,120,S.ijBoost,88,function(v) S.ijBoost=v end)
+	local function ij_bind(char) local hum=char:WaitForChild("Humanoid"); local root=char:WaitForChild("HumanoidRootPart"); hum.UseJumpPower=true; disconnect(S.ijConn)
+		S.ijConn=UIS.JumpRequest:Connect(function() if not S.ijOn then return end; if hum.Health<=0 or hum:GetState()==Enum.HumanoidStateType.Dead then return end; local v=root.AssemblyLinearVelocity; root.AssemblyLinearVelocity=Vector3.new(v.X, math.max(S.ijBoost,0), v.Z); hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
 	end
 	if LP.Character then ij_bind(LP.Character) end
 	LP.CharacterAdded:Connect(function(c) if S.ijOn then ij_bind(c) end end)
 	Toggle.MouseButton1Click:Connect(function() S.ijOn=not S.ijOn; setT(S.ijOn); if S.ijOn then if LP.Character then ij_bind(LP.Character) end else disconnect(S.ijConn); S.ijConn=nil end end)
 end
 
--- Drag (borné) + Hide
+-- ========= Drag + Hide =========
 local function clampToScreen(x,y) local vs=workspace.CurrentCamera.ViewportSize; local w,h=Main.AbsoluteSize.X,Main.AbsoluteSize.Y; return math.clamp(x,0,math.max(0,vs.X-w)), math.clamp(y,0,math.max(0,vs.Y-h)) end
 local dragging,offset
 local function beginDrag(io) dragging=true; local p=Main.AbsolutePosition; offset=Vector2.new(io.Position.X-p.X, io.Position.Y-p.Y) end
@@ -787,10 +631,8 @@ UIS.InputBegan:Connect(function(io)
 	if UIS:GetFocusedTextBox() then return end
 	if io.UserInputType==Enum.UserInputType.Keyboard then
 		local shift = UIS:IsKeyDown(Enum.KeyCode.LeftShift) or UIS:IsKeyDown(Enum.KeyCode.RightShift)
-		if (shift and io.KeyCode==Enum.KeyCode.Four) or io.KeyCode==Enum.KeyCode.F2 or io.KeyCode==Enum.KeyCode.Insert or io.KeyCode==Enum.KeyCode.RightControl then
-			toggleUI()
-		end
+		if (shift and io.KeyCode==Enum.KeyCode.Four) or io.KeyCode==Enum.KeyCode.F2 or io.KeyCode==Enum.KeyCode.Insert or io.KeyCode==Enum.KeyCode.RightControl then toggleUI() end
 	end
 end)
 
-print("[Premium Hub v4] ESP réparé (aura + box + pseudo + distance), UI VIP activée. Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
+print("[Premium Hub v5] UI premium chargée. ESP full OK. Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
