@@ -1,18 +1,15 @@
 --[[
-  ⚡ Premium Hub v3 — Speed • Fly • Light • ESP (box+name+distance) • TP • NoClip • Infinite Jump • Hitbox
+  ⚡ Premium Hub v4 — Speed • Fly • Light • ESP (aura+box+name+distance) • TP • NoClip • IJ • Hitbox
   Ouvrir/Fermer l'UI : "$" (Shift+4) • F2 • Insert • RightCtrl
 
-  Nouveauté:
-   - Hitbox (client): agrandit le HumanoidRootPart des autres joueurs, réglable, propre & réversible.
-
-  ESP:
-   - Pseudo + carré (SelectionBox) + distance
-   - Couleurs: rôle > équipe > défaut
-   - MAJ live si rôle/équipe changent
+  CHANGEMENTS (v4) :
+   - ESP FIX 💥 : pseudo + distance rétablis, aura couleur (Highlight) + box (SelectionBox),
+                  plus de doublons, parentage Billboard correct (Head), MAJ live rôles/équipes.
+   - UI VIP ✨  : gradient, ombres douces, micro-animations, titres avec icônes.
 ]]
 
-if _G.__PREMIUM_MENU_V3 then return end
-_G.__PREMIUM_MENU_V3 = true
+if _G.__PREMIUM_MENU_V4 then return end
+_G.__PREMIUM_MENU_V4 = true
 
 -- ========= Services =========
 local Players  = game:GetService("Players")
@@ -51,13 +48,14 @@ local S = {
 	-- Light
 	lightOn=false, lightBackup=nil,
 
-	-- ESP (complet)
-	espOn=false, espConn=nil, espAcc=0, espHz=10,
-	espShowUsername=true, -- unique option d’ESP
+	-- ESP
+	espOn=false, espConn=nil,
+	espHz=10,                     -- throttle (perf + stable)
+	espShowUsername=true,         -- unique option visible côté ESP
+	espMaxDist=math.huge,
 
 	-- Hitbox
-	hitboxOn=false, hitboxSize=10,
-	hitboxConn=nil, hitboxOrig={}, -- [HRP] = {Size=..., Transparency=..., Material=..., CanCollide=...}
+	hitboxOn=false, hitboxSize=10, hitboxConn=nil, hitboxOrig={},
 
 	-- TP
 	tpSelectedUserId=nil, tpSelectedLabel=nil,
@@ -70,11 +68,12 @@ local S = {
 }
 
 -- ========= UI =========
-local UI = Instance.new("ScreenGui"); UI.Name="PremiumHubV3"; safeParent(UI)
+local UI = Instance.new("ScreenGui"); UI.Name="PremiumHubV4"; safeParent(UI)
 
+-- Root
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(510, 640) -- un peu plus haut pour la Hitbox card
-Main.BackgroundColor3 = Color3.fromRGB(18,18,20)
+Main.Size = UDim2.fromOffset(560, 700)
+Main.BackgroundColor3 = Color3.fromRGB(16,16,19)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Parent = UI
@@ -83,56 +82,97 @@ do local vs=workspace.CurrentCamera.ViewportSize
 end
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0,16)
 local stroke=Instance.new("UIStroke",Main) stroke.Thickness=1.5; stroke.Transparency=.15; stroke.Color=Color3.fromRGB(255,255,255)
+
+-- Soft shadow
 local Shadow=Instance.new("ImageLabel")
-Shadow.Image="rbxassetid://5028857084"; Shadow.ImageTransparency=.4; Shadow.ScaleType=Enum.ScaleType.Slice; Shadow.SliceCenter=Rect.new(24,24,276,276)
-Shadow.AnchorPoint=Vector2.new(.5,.5); Shadow.Position=UDim2.fromScale(.5,.5); Shadow.Size=UDim2.new(1,32,1,32); Shadow.BackgroundTransparency=1; Shadow.Parent=Main
+Shadow.Image="rbxassetid://5028857084"
+Shadow.ImageTransparency=.45
+Shadow.ScaleType=Enum.ScaleType.Slice
+Shadow.SliceCenter=Rect.new(24,24,276,276)
+Shadow.AnchorPoint=Vector2.new(.5,.5)
+Shadow.Position=UDim2.fromScale(.5,.5)
+Shadow.Size=UDim2.new(1,40,1,40)
+Shadow.BackgroundTransparency=1
+Shadow.Parent=Main
+
+-- Gradient glaze
+local Glaze = Instance.new("Frame"); Glaze.BackgroundTransparency = 1; Glaze.Size = UDim2.fromScale(1,1); Glaze.Parent = Main
+local G = Instance.new("UIGradient", Glaze)
+G.Rotation = 25
+G.Transparency = NumberSequence.new{
+	NumberSequenceKeypoint.new(0, 0.3),
+	NumberSequenceKeypoint.new(0.5, 0.6),
+	NumberSequenceKeypoint.new(1, 0.3)
+}
+G.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(38,66,255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(195,92,255))
+}
 
 -- Header
-local Header=Instance.new("Frame"); Header.Size=UDim2.new(1,0,0,46); Header.BackgroundTransparency=1; Header.Active=true; Header.Parent=Main
-local Title=Instance.new("TextLabel"); Title.BackgroundTransparency=1; Title.Position=UDim2.fromOffset(14,8); Title.Size=UDim2.fromOffset(360,30)
-Title.Font=Enum.Font.GothamBold; Title.TextSize=18; Title.TextXAlignment=Enum.TextXAlignment.Left; Title.TextColor3=Color3.fromRGB(255,255,255)
-Title.Text="⚡ Premium Hub v3 — Speed • Fly • Light • ESP • TP • NoClip • IJ • Hitbox"; Title.Parent=Header
-local Hint=Instance.new("TextLabel"); Hint.BackgroundTransparency=1; Hint.AnchorPoint=Vector2.new(1,0); Hint.Position=UDim2.new(1,-42,0,10)
-Hint.Size=UDim2.fromOffset(300,24); Hint.Font=Enum.Font.Gotham; Hint.TextSize=14; Hint.TextXAlignment=Enum.TextXAlignment.Right; Hint.TextColor3=Color3.fromRGB(180,180,190)
+local Header=Instance.new("Frame"); Header.Size=UDim2.new(1,0,0,56); Header.BackgroundTransparency=1; Header.Active=true; Header.Parent=Main
+local Title=Instance.new("TextLabel"); Title.BackgroundTransparency=1; Title.Position=UDim2.fromOffset(16,10); Title.Size=UDim2.fromOffset(380,32)
+Title.Font=Enum.Font.GothamBlack; Title.TextSize=20; Title.TextXAlignment=Enum.TextXAlignment.Left; Title.TextColor3=Color3.fromRGB(255,255,255)
+Title.Text="👑 Premium Hub v4 — VIP"
+Title.Parent=Header
+local Hint=Instance.new("TextLabel"); Hint.BackgroundTransparency=1; Hint.AnchorPoint=Vector2.new(1,0); Hint.Position=UDim2.new(1,-46,0,14)
+Hint.Size=UDim2.fromOffset(320,24); Hint.Font=Enum.Font.Gotham; Hint.TextSize=14; Hint.TextXAlignment=Enum.TextXAlignment.Right; Hint.TextColor3=Color3.fromRGB(185,190,205)
 Hint.Text='Hide: "$"(⇧+4) • F2 • Insert • RightCtrl'; Hint.Parent=Header
-local HideBtn=Instance.new("TextButton"); HideBtn.AnchorPoint=Vector2.new(1,0); HideBtn.Position=UDim2.new(1,-10,0,8); HideBtn.Size=UDim2.fromOffset(28,28)
-HideBtn.Text="✕"; HideBtn.TextSize=18; HideBtn.Font=Enum.Font.GothamBold; HideBtn.TextColor3=Color3.fromRGB(230,230,235); HideBtn.AutoButtonColor=false
-HideBtn.BackgroundColor3=Color3.fromRGB(60,60,68); HideBtn.Parent=Header; Instance.new("UICorner",HideBtn).CornerRadius=UDim.new(1,0); Instance.new("UIStroke",HideBtn).Transparency=.35
-local Sep=Instance.new("Frame"); Sep.BackgroundColor3=Color3.fromRGB(45,45,52); Sep.Size=UDim2.new(1,-24,0,1); Sep.Position=UDim2.fromOffset(12,46); Sep.BorderSizePixel=0; Sep.Parent=Main
 
--- Scroll content
-local Content=Instance.new("ScrollingFrame"); Content.Position=UDim2.fromOffset(12,58); Content.Size=UDim2.new(1,-24,1,-70)
+local HideBtn=Instance.new("TextButton"); HideBtn.AnchorPoint=Vector2.new(1,0); HideBtn.Position=UDim2.new(1,-10,0,10); HideBtn.Size=UDim2.fromOffset(30,30)
+HideBtn.Text="✕"; HideBtn.TextSize=18; HideBtn.Font=Enum.Font.GothamBold; HideBtn.TextColor3=Color3.fromRGB(235,240,255); HideBtn.AutoButtonColor=false
+HideBtn.BackgroundColor3=Color3.fromRGB(55,60,75); HideBtn.Parent=Header; Instance.new("UICorner",HideBtn).CornerRadius=UDim.new(1,0); Instance.new("UIStroke",HideBtn).Transparency=.35
+
+local Sep=Instance.new("Frame"); Sep.BackgroundColor3=Color3.fromRGB(45,45,56); Sep.Size=UDim2.new(1,-24,0,1); Sep.Position=UDim2.fromOffset(12,56); Sep.BorderSizePixel=0; Sep.Parent=Main
+
+-- Content
+local Content=Instance.new("ScrollingFrame"); Content.Position=UDim2.fromOffset(12,68); Content.Size=UDim2.new(1,-24,1,-80)
 Content.CanvasSize=UDim2.new(0,0,0,0); Content.ScrollBarThickness=6; Content.BackgroundTransparency=1; Content.ScrollingDirection=Enum.ScrollingDirection.Y; Content.Parent=Main
 local VList=Instance.new("UIListLayout",Content); VList.Padding=UDim.new(0,12); VList.SortOrder=Enum.SortOrder.LayoutOrder
 local function refreshCanvas() Content.CanvasSize=UDim2.new(0,0,0,VList.AbsoluteContentSize.Y+8) end
 VList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshCanvas)
 
--- Helpers
-local function makeCard(titleText, subtitleText, height)
-	local Card=Instance.new("Frame"); Card.Size=UDim2.new(1,0,0,height); Card.BackgroundColor3=Color3.fromRGB(24,24,28); Card.BorderSizePixel=0; Card.Active=true; Card.Parent=Content
+-- Helpers UI
+local function makeBadge(text)
+	local B=Instance.new("TextLabel"); B.BackgroundTransparency=1; B.Font=Enum.Font.GothamSemibold; B.TextSize=12
+	B.TextColor3=Color3.fromRGB(215,225,255); B.Text= text; B.Size=UDim2.fromOffset(160,16); return B
+end
+
+local function makeCard(titleText, subtitleText, height, icon)
+	local Card=Instance.new("Frame"); Card.Size=UDim2.new(1,0,0,height); Card.BackgroundColor3=Color3.fromRGB(22,22,27); Card.BorderSizePixel=0; Card.Active=true; Card.Parent=Content
 	Instance.new("UICorner",Card).CornerRadius=UDim.new(0,12)
-	local s=Instance.new("UIStroke",Card); s.Thickness=1; s.Transparency=0.25; s.Color=Color3.fromRGB(255,255,255)
-	local T=Instance.new("TextLabel"); T.BackgroundTransparency=1; T.Font=Enum.Font.GothamSemibold; T.TextSize=16; T.TextXAlignment=Enum.TextXAlignment.Left; T.TextColor3=Color3.fromRGB(235,235,240); T.Text=titleText; T.Position=UDim2.fromOffset(12,8); T.Size=UDim2.fromOffset(360,20); T.Parent=Card
-	local ST=Instance.new("TextLabel"); ST.BackgroundTransparency=1; ST.Font=Enum.Font.Gotham; ST.TextSize=13; ST.TextXAlignment=Enum.TextXAlignment.Left; ST.TextColor3=Color3.fromRGB(170,170,182); ST.Text=subtitleText or ""; ST.Position=UDim2.fromOffset(12,30); ST.Size=UDim2.fromOffset(470,18); ST.Parent=Card
+	local s=Instance.new("UIStroke",Card); s.Thickness=1; s.Transparency=.22; s.Color=Color3.fromRGB(255,255,255)
+
+	local T=Instance.new("TextLabel"); T.BackgroundTransparency=1; T.Font=Enum.Font.GothamSemibold; T.TextSize=16; T.TextXAlignment=Enum.TextXAlignment.Left
+	T.TextColor3=Color3.fromRGB(235,240,255); T.Text=(icon and (icon.."  ") or "")..titleText; T.Position=UDim2.fromOffset(14,8); T.Size=UDim2.fromOffset(420,20); T.Parent=Card
+
+	local ST=Instance.new("TextLabel"); ST.BackgroundTransparency=1; ST.Font=Enum.Font.Gotham; ST.TextSize=13; ST.TextXAlignment=Enum.TextXAlignment.Left
+	ST.TextColor3=Color3.fromRGB(170,175,190); ST.Text=subtitleText or ""; ST.Position=UDim2.fromOffset(14,30); ST.Size=UDim2.fromOffset(520,18); ST.Parent=Card
+
 	return Card
 end
+
 local function makeToggle(parent, defaultOn, xOff)
 	local Btn=Instance.new("TextButton"); Btn.AutoButtonColor=false; Btn.AnchorPoint=Vector2.new(1,0); Btn.Position=UDim2.new(1,-(xOff or 10),0,8)
-	Btn.Size=UDim2.fromOffset(64,28); Btn.BackgroundColor3= defaultOn and Color3.fromRGB(60,200,110) or Color3.fromRGB(60,60,68); Btn.Text=""; Btn.Parent=parent
+	Btn.Size=UDim2.fromOffset(68,28); Btn.BackgroundColor3= defaultOn and Color3.fromRGB(68,205,128) or Color3.fromRGB(64,66,80); Btn.Text=""; Btn.Parent=parent
 	Instance.new("UICorner",Btn).CornerRadius=UDim.new(1,0); local s=Instance.new("UIStroke",Btn); s.Thickness=1; s.Transparency=.2; s.Color=Color3.fromRGB(255,255,255)
-	local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(26,26); Knob.Position= defaultOn and UDim2.fromOffset(36,1) or UDim2.fromOffset(1,1); Knob.BackgroundColor3=Color3.fromRGB(240,240,245); Knob.Parent=Btn
+	local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(26,26); Knob.Position= defaultOn and UDim2.fromOffset(40,1) or UDim2.fromOffset(2,1); Knob.BackgroundColor3=Color3.fromRGB(240,240,245); Knob.Parent=Btn
 	Instance.new("UICorner",Knob).CornerRadius=UDim.new(1,0)
-	local function setOn(on) tween(Btn,.15,{BackgroundColor3= on and Color3.fromRGB(60,200,110) or Color3.fromRGB(60,60,68)}):Play(); tween(Knob,.15,{Position= on and UDim2.fromOffset(36,1) or UDim2.fromOffset(1,1)}):Play() end
+	local function setOn(on)
+		tween(Btn,.15,{BackgroundColor3= on and Color3.fromRGB(68,205,128) or Color3.fromRGB(64,66,80)}):Play()
+		tween(Knob,.15,{Position= on and UDim2.fromOffset(40,1) or UDim2.fromOffset(2,1)}):Play()
+	end
 	return Btn,setOn
 end
+
 local function makeSlider(parent, title, minV, maxV, defaultV, yOff, onChanged, valueFmt)
-	local Wrap=Instance.new("Frame"); Wrap.BackgroundTransparency=1; Wrap.Position=UDim2.fromOffset(12,yOff or 56); Wrap.Size=UDim2.new(1,-24,0,60); Wrap.Parent=parent
+	local Wrap=Instance.new("Frame"); Wrap.BackgroundTransparency=1; Wrap.Position=UDim2.fromOffset(14,yOff or 56); Wrap.Size=UDim2.new(1,-28,0,62); Wrap.Parent=parent
 	local function fmt(v) return valueFmt and valueFmt(v) or tostring(v) end
-	local T=Instance.new("TextLabel"); T.BackgroundTransparency=1; T.Font=Enum.Font.Gotham; T.TextSize=14; T.TextXAlignment=Enum.TextXAlignment.Left; T.TextColor3=Color3.fromRGB(200,200,210)
-	T.Text=string.format("%s: %s",title,fmt(defaultV)); T.Position=UDim2.fromOffset(0,0); T.Size=UDim2.fromOffset(280,18); T.Parent=Wrap
-	local Bar=Instance.new("Frame"); Bar.BackgroundColor3=Color3.fromRGB(45,45,55); Bar.BorderSizePixel=0; Bar.Position=UDim2.fromOffset(0,26); Bar.Size=UDim2.new(1,0,0,8); Bar.Parent=Wrap
+	local T=Instance.new("TextLabel"); T.BackgroundTransparency=1; T.Font=Enum.Font.Gotham; T.TextSize=14; T.TextXAlignment=Enum.TextXAlignment.Left; T.TextColor3=Color3.fromRGB(205,210,225)
+	T.Text=string.format("%s: %s",title,fmt(defaultV)); T.Position=UDim2.fromOffset(0,0); T.Size=UDim2.fromOffset(360,18); T.Parent=Wrap
+	local Bar=Instance.new("Frame"); Bar.BackgroundColor3=Color3.fromRGB(48,50,65); Bar.BorderSizePixel=0; Bar.Position=UDim2.fromOffset(0,26); Bar.Size=UDim2.new(1,0,0,8); Bar.Parent=Wrap
 	Instance.new("UICorner",Bar).CornerRadius=UDim.new(0,6)
-	local Fill=Instance.new("Frame"); Fill.BackgroundColor3=Color3.fromRGB(110,170,255); Fill.BorderSizePixel=0; Fill.Size=UDim2.fromOffset(0,8); Fill.Parent=Bar
+	local Fill=Instance.new("Frame"); Fill.BackgroundColor3=Color3.fromRGB(120,170,255); Fill.BorderSizePixel=0; Fill.Size=UDim2.fromOffset(0,8); Fill.Parent=Bar
 	Instance.new("UICorner",Fill).CornerRadius=UDim.new(0,6)
 	local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(14,14); Knob.Position=UDim2.fromOffset(-7,-3); Knob.BackgroundColor3=Color3.fromRGB(240,240,245); Knob.Parent=Fill
 	Instance.new("UICorner",Knob).CornerRadius=UDim.new(1,0)
@@ -275,144 +315,220 @@ local function light_disable()
 	if S.lightBackup then Lighting.GlobalShadows=S.lightBackup.GlobalShadows; Lighting.FogEnd=S.lightBackup.FogEnd; Lighting.Brightness=S.lightBackup.Brightness; Lighting.Ambient=S.lightBackup.Ambient end
 end
 
--- ========= ESP (BOX + NAME + DISTANCE) =========
+-- ========= ESP (aura + box + pseudo + distance) =========
 local ROLE_COLORS = {
 	Murder=Color3.fromRGB(255,60,60), Murderer=Color3.fromRGB(255,60,60),
 	Innocent=Color3.fromRGB(64,128,255),
 	Sheriff=Color3.fromRGB(255,220,0), Detective=Color3.fromRGB(255,220,0),
 }
 local DEFAULT_COLOR = Color3.fromRGB(200,200,200)
-local ESP_MAX_DIST = math.huge
 
-local function getRole(p,char) local r=p:GetAttribute("Role"); if r==nil and char then r=char:GetAttribute("Role") end; return (typeof(r)=="string") and r or nil end
+local function getRole(p,char)
+	local r=p:GetAttribute("Role")
+	if r==nil and char then r=char:GetAttribute("Role") end
+	return (typeof(r)=="string") and r or nil
+end
 local function colorFor(p,char)
 	local role=getRole(p,char); if role and ROLE_COLORS[role] then return ROLE_COLORS[role] end
 	if p.Team and p.Team.TeamColor then return p.Team.TeamColor.Color end
 	return DEFAULT_COLOR
 end
-local function bestAdornee(char) return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart") end
 
-local ESP_REG = {} -- [Player] = {char, box, bb, name, dist, lastName="", lastDist=-1, lastColor=nil, conns={...}}
-
-local function cleanupLegacy(char)
-	local keepBB=nil
-	for _,d in ipairs(char:GetChildren()) do
-		if d:IsA("BillboardGui") and d.Name=="ESP_BBG" then
-			if keepBB then d:Destroy() else keepBB=d end
-		end
-	end
-	for _,d in ipairs(char:GetChildren()) do
-		if d:IsA("SelectionBox") and d.Name=="ESP_Box" then
-			d:Destroy()
-		end
-	end
-	return keepBB
+local function getHeadOrPart(char)
+	return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart")
 end
 
-local function makeOrGet(p,char)
+-- Registre ESP
+local ESP_REG = {} -- [Player] = {char, head, hl, box, bb, nameLbl, distLbl, lastName, lastDist, lastColor, conns}
+
+local function clearBillboards(char)
+	for _,d in ipairs(char:GetDescendants()) do
+		if d:IsA("BillboardGui") and d.Name=="ESP_BBG" then d:Destroy() end
+	end
+end
+
+local function buildESPFor(p, char)
 	if not char or p==LP then return end
-	local reg=ESP_REG[p]
+	local reg = ESP_REG[p]
 	if not reg then reg={conns={}}; ESP_REG[p]=reg else disconnectAll(reg.conns) end
 	reg.char=char
 
-	local box=Instance.new("SelectionBox")
-	box.Name="ESP_Box"
-	box.Adornee=char
-	box.LineThickness=0.02
-	box.SurfaceTransparency=1
-	box.Parent=char
-	reg.box=box
+	-- Head/Adornee
+	local head = getHeadOrPart(char)
+	reg.head = head
 
-	local bb=cleanupLegacy(char)
-	if not bb then
-		bb=Instance.new("BillboardGui"); bb.Name="ESP_BBG"
-		bb.Size=UDim2.new(0, 210, 0, 42)
-		bb.StudsOffset=Vector3.new(0,3,0)
-		bb.AlwaysOnTop=true
-		bb.MaxDistance=5000
-		bb.Parent=char
-		local nameLbl=Instance.new("TextLabel"); nameLbl.Name="Name"
-		nameLbl.BackgroundTransparency=1; nameLbl.Size=UDim2.new(1,0,0.5,0)
-		nameLbl.Font=Enum.Font.GothamBold; nameLbl.TextScaled=true; nameLbl.TextStrokeTransparency=.5; nameLbl.Parent=bb
-		local distLbl=Instance.new("TextLabel"); distLbl.Name="Dist"
-		distLbl.BackgroundTransparency=1; distLbl.Position=UDim2.new(0,0,0.5,0); distLbl.Size=UDim2.new(1,0,0.5,0)
-		distLbl.Font=Enum.Font.Gotham; distLbl.TextScaled=true; distLbl.TextStrokeTransparency=.5; distLbl.Parent=bb
+	-- Highlight (aura)
+	local hl = char:FindFirstChild("ESP_Highlight")
+	if not hl then
+		hl = Instance.new("Highlight")
+		hl.Name = "ESP_Highlight"
+		hl.FillTransparency = 1      -- aura contour only (perf-friendly)
+		hl.OutlineTransparency = 0
+		hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		hl.Parent = char
 	end
-	reg.bb=bb; reg.name=bb:FindChild("Name") or bb:FindFirstChild("Name"); reg.dist=bb:FindChild("Dist") or bb:FindFirstChild("Dist"); reg.lastName=""; reg.lastDist=-1
-	bb.Adornee = bestAdornee(char)
+	reg.hl = hl
 
+	-- SelectionBox (box 3D)
+	local box = char:FindFirstChild("ESP_Box")
+	if not box then
+		box = Instance.new("SelectionBox")
+		box.Name = "ESP_Box"
+		box.LineThickness = 0.02
+		box.SurfaceTransparency = 1
+		box.Adornee = char
+		box.Parent = char
+	end
+	reg.box = box
+
+	-- Billboard (pseudo + distance) — IMPORTANT : parent sur une BasePart (Head/HRP)
+	clearBillboards(char)
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "ESP_BBG"
+	bb.Size = UDim2.new(0, 220, 0, 44)
+	bb.StudsOffset = Vector3.new(0, 3, 0)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 5000
+	if head and head:IsA("BasePart") then
+		bb.Parent = head
+	else
+		-- fallback : HRP
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		bb.Parent = hrp or char
+	end
+
+	local nameLbl = Instance.new("TextLabel")
+	nameLbl.Name = "Name"
+	nameLbl.BackgroundTransparency = 1
+	nameLbl.Size = UDim2.new(1, 0, 0.5, 0)
+	nameLbl.Font = Enum.Font.GothamBold
+	nameLbl.TextScaled = true
+	nameLbl.TextStrokeTransparency = 0.5
+	nameLbl.TextColor3 = Color3.fromRGB(255,255,255)
+	nameLbl.Parent = bb
+
+	local distLbl = Instance.new("TextLabel")
+	distLbl.Name = "Dist"
+	distLbl.BackgroundTransparency = 1
+	distLbl.Position = UDim2.new(0, 0, 0.5, 0)
+	distLbl.Size = UDim2.new(1, 0, 0.5, 0)
+	distLbl.Font = Enum.Font.Gotham
+	distLbl.TextScaled = true
+	distLbl.TextStrokeTransparency = 0.5
+	distLbl.TextColor3 = Color3.fromRGB(230,230,235)
+	distLbl.Parent = bb
+
+	reg.bb, reg.nameLbl, reg.distLbl = bb, nameLbl, distLbl
+	reg.lastName, reg.lastDist, reg.lastColor = "", -1, nil
+
+	-- Suivre nouveau Head si recréé
 	table.insert(reg.conns, char.DescendantAdded:Connect(function(d)
-		if d.Name=="Head" and d:IsA("BasePart") then if reg.bb and reg.bb.Adornee~=d then reg.bb.Adornee=d end end
+		if d.Name=="Head" and d:IsA("BasePart") then
+			if reg.bb and reg.bb.Parent ~= d then reg.bb.Parent = d end
+			reg.head = d
+		end
 	end))
-	table.insert(reg.conns, char.AncestryChanged:Connect(function(_,parent) if parent==nil then disconnectAll(reg.conns) end end))
-
-	return reg
+	table.insert(reg.conns, char.AncestryChanged:Connect(function(_, parent)
+		if parent==nil then disconnectAll(reg.conns) end
+	end))
 end
 
-local function ensureBuilt(p)
+local function ensureESPFor(p)
 	local char=p.Character
 	if not char then return end
 	local reg=ESP_REG[p]
-	if not reg or reg.char~=char or not reg.bb or not reg.box then
-		makeOrGet(p,char)
+	if not reg or reg.char~=char or not reg.bb or not reg.hl or not reg.box then
+		buildESPFor(p,char)
 	end
 end
 
-local function colorsEqual(a,b) if not a or not b then return false end; return a.r==b.r and a.g==b.g and a.b==b.b end
+local function sameColor(a,b) if not a or not b then return false end; return a.r==b.r and a.g==b.g and a.b==b.b end
 
-local function esp_tick(dt)
+local function esp_update()
+	local myC=LP.Character; if not myC then return end
+	local myHRP=myC:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
+
 	for _,p in ipairs(Players:GetPlayers()) do
 		if p~=LP then
-			ensureBuilt(p)
+			ensureESPFor(p)
 			local reg=ESP_REG[p]
 			local char=p.Character
-			if not (reg and char and reg.box and reg.bb and reg.name and reg.dist) then continue end
+			if not (reg and char and reg.bb and reg.hl and reg.box) then
+				-- rien à faire
+			else
+				local tHRP = char:FindFirstChild("HumanoidRootPart")
+				if not tHRP then
+					reg.bb.Enabled=false; reg.hl.Enabled=false; reg.box.Visible=false
+				else
+					local dist=(myHRP.Position - tHRP.Position).Magnitude
+					if dist > S.espMaxDist then
+						reg.bb.Enabled=false; reg.hl.Enabled=false; reg.box.Visible=false
+					else
+						-- Couleurs dynamiques
+						local col = colorFor(p,char)
+						if not sameColor(reg.lastColor, col) then
+							reg.lastColor = col
+							reg.hl.OutlineColor = col
+							pcall(function() reg.box.LineColor3 = col end)
+							pcall(function() reg.box.Color3 = col end) -- compat
+							reg.nameLbl.TextColor3 = col
+							reg.distLbl.TextColor3 = col
+						end
 
-			local myC=LP.Character; if not myC then continue end
-			local myHRP=myC:FindFirstChild("HumanoidRootPart"); local tHRP=char:FindFirstChild("HumanoidRootPart")
-			local head = char:FindFirstChild("Head") or char:FindFirstChildWhichIsA("BasePart")
-			if not (myHRP and tHRP and head) then reg.box.Visible=false; reg.bb.Enabled=false; continue end
+						-- Pseudo
+						local display = (p.DisplayName and p.DisplayName ~= "") and p.DisplayName or p.Name
+						local wantName = S.espShowUsername and (display.." (@"..p.Name..")") or display
+						if reg.lastName ~= wantName then
+							reg.nameLbl.Text = wantName
+							reg.lastName = wantName
+						end
 
-			local dist=(myHRP.Position - tHRP.Position).Magnitude
-			if dist > ESP_MAX_DIST then reg.box.Visible=false; reg.bb.Enabled=false; continue end
+						-- Distance
+						local di = (dist >= 0) and math.floor(dist + 0.5) or 0
+						if reg.lastDist ~= di then
+							reg.distLbl.Text = tostring(di).." studs"
+							reg.lastDist = di
+						end
 
-			local col = colorFor(p,char)
-			if not colorsEqual(reg.lastColor, col) then
-				reg.lastColor = col
-				pcall(function() reg.box.LineColor3 = col end)
-				pcall(function() reg.box.Color3 = col end)
-				reg.name.TextColor3 = col
-				reg.dist.TextColor3 = col
+						-- Afficher
+						reg.bb.Enabled = true
+						reg.hl.Enabled = true
+						reg.box.Visible = true
+
+						-- S'assure que le billboard reste sur un BasePart
+						if reg.bb.Parent == reg.char or (not reg.bb.Parent) or (not reg.bb.Parent.Parent) then
+							local h = getHeadOrPart(char)
+							if h then reg.bb.Parent = h end
+						end
+					end
+				end
 			end
-
-			local display = (p.DisplayName and p.DisplayName ~= "") and p.DisplayName or p.Name
-			local wantName = S.espShowUsername and (display.." (@"..p.Name..")") or display
-			if reg.lastName ~= wantName then reg.name.Text = wantName; reg.lastName = wantName end
-
-			local di = (dist >= 0) and math.floor(dist + 0.5) or 0
-			if reg.lastDist ~= di then reg.dist.Text = tostring(di).." studs"; reg.lastDist = di end
-
-			reg.box.Visible = true
-			reg.bb.Enabled = true
-			if (not reg.bb.Adornee) or (not reg.bb.Adornee.Parent) then reg.bb.Adornee = bestAdornee(char) end
 		end
 	end
 end
 
 local function esp_enable()
 	if S.espConn then return end
-	for _,pl in ipairs(Players:GetPlayers()) do if pl~=LP and pl.Character then makeOrGet(pl, pl.Character) end end
-	S.espConn = RS.Heartbeat:Connect(esp_tick) -- 60 Hz; léger et sûr pour rafraîchir couleurs/roles
+	for _,pl in ipairs(Players:GetPlayers()) do if pl~=LP and pl.Character then buildESPFor(pl, pl.Character) end end
+	local acc=0
+	S.espConn = RS.Heartbeat:Connect(function(dt)
+		acc += dt
+		if acc >= (1/math.max(1,S.espHz)) then
+			esp_update()
+			acc = 0
+		end
+	end)
 	Players.PlayerAdded:Connect(function(p)
-		p.CharacterAdded:Connect(function(c) task.wait(0.2); makeOrGet(p,c) end)
-		if p.Character then makeOrGet(p,p.Character) end
+		p.CharacterAdded:Connect(function(c) task.wait(0.2); buildESPFor(p,c) end)
+		if p.Character then buildESPFor(p,p.Character) end
 	end)
 end
 local function esp_disable()
 	disconnect(S.espConn); S.espConn=nil
 	for _,reg in pairs(ESP_REG) do
-		if reg.box then reg.box.Visible=false end
 		if reg.bb then reg.bb.Enabled=false end
+		if reg.hl then reg.hl.Enabled=false end
+		if reg.box then reg.box.Visible=false end
 	end
 end
 
@@ -424,20 +540,18 @@ local function rememberHRP(hrp)
 		Transparency = hrp.Transparency,
 		Material = hrp.Material,
 		CanCollide = hrp.CanCollide,
+		BrickColor = hrp.BrickColor,
 	}
 end
-
 local function applyHitboxTo(hrp)
 	if not hrp then return end
 	rememberHRP(hrp)
-	-- Valeurs "style original": Neon rouge, semi-transparent, pas de collisions
 	hrp.Size = Vector3.new(S.hitboxSize, S.hitboxSize, S.hitboxSize)
 	hrp.Transparency = 0.7
 	hrp.BrickColor = BrickColor.new("Really red")
 	hrp.Material = Enum.Material.Neon
 	hrp.CanCollide = false
 end
-
 local function restoreAllHitbox()
 	for hrp,orig in pairs(S.hitboxOrig) do
 		if hrp and hrp.Parent and orig then
@@ -446,14 +560,13 @@ local function restoreAllHitbox()
 				hrp.Transparency = orig.Transparency
 				hrp.Material = orig.Material
 				hrp.CanCollide = orig.CanCollide
+				hrp.BrickColor = orig.BrickColor
 			end)
 		end
 	end
 	S.hitboxOrig = {}
 end
-
 local function hitbox_loop()
-	-- Boucle côté client pour contrer les resets serveurs
 	for _,pl in ipairs(Players:GetPlayers()) do
 		if pl ~= LP and pl.Character then
 			local hrp = pl.Character:FindFirstChild("HumanoidRootPart")
@@ -461,16 +574,12 @@ local function hitbox_loop()
 		end
 	end
 end
-
 local function hitbox_enable()
 	if S.hitboxConn then return end
-	-- Applique immédiatement
 	hitbox_loop()
-	-- Et maintient à chaque RenderStepped (fluide)
 	S.hitboxConn = RS.RenderStepped:Connect(function()
 		if S.hitboxOn then hitbox_loop() end
 	end)
-	-- Sur nouveaux joueurs / respawn, on mémorise les originaux dès que possible
 	Players.PlayerAdded:Connect(function(p)
 		p.CharacterAdded:Connect(function(c)
 			task.wait(0.1)
@@ -479,7 +588,6 @@ local function hitbox_enable()
 		end)
 	end)
 end
-
 local function hitbox_disable()
 	disconnect(S.hitboxConn); S.hitboxConn=nil
 	restoreAllHitbox()
@@ -520,33 +628,34 @@ end
 local function listOthers() local arr={}; for _,p in ipairs(Players:GetPlayers()) do if p~=LP then table.insert(arr,p) end end; table.sort(arr,function(a,b) local ad=(a.DisplayName~="" and a.DisplayName) or a.Name; local bd=(b.DisplayName~="" and b.DisplayName) or b.Name; return string.lower(ad) < string.lower(bd) end); return arr end
 
 -- ========= Cartes =========
+
 -- Speed
 do
-	local Card=makeCard("Speed","Maintient ta vitesse (anti-reset + respawn)",150)
+	local Card=makeCard("⚡ Speed","Maintient ta vitesse (anti-reset + respawn).",150)
 	local Toggle,setT=makeToggle(Card,false)
 	makeSlider(Card,"Vitesse",S.minSpeed,S.maxSpeed,S.speed,56,function(v) S.speed=v end)
 	Toggle.MouseButton1Click:Connect(function() S.speedOn=not S.speedOn; setT(S.speedOn); if S.speedOn then speed_enable() else speed_disable() end end)
 end
 
 -- Fly
-do local Card=makeCard("Fly","Vol fluide (WASD/ZQSD + inclinaison caméra) — sortie propre",100); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("🕊️ Fly","Vol fluide (WASD/ZQSD + inclinaison caméra) — sortie propre.",100); local Toggle,setT=makeToggle(Card,false)
 	Toggle.MouseButton1Click:Connect(function() S.flyOn=not S.flyOn; setT(S.flyOn); if S.flyOn then fly_enable() else fly_disable() end end)
 end
 
 -- Light
-do local Card=makeCard("Light","Désactive ombres, enlève brouillard, boost luminosité",100); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("💡 Light","Désactive ombres, enlève brouillard, boost luminosité.",100); local Toggle,setT=makeToggle(Card,false)
 	Toggle.MouseButton1Click:Connect(function() S.lightOn=not S.lightOn; setT(S.lightOn); if S.lightOn then light_enable() else light_disable() end end)
 end
 
--- ESP (Complet, mini-toggle username)
+-- ESP
 do
-	local Card=makeCard("ESP Player","Pseudo + carré + distance (couleurs dynamiques).",150)
+	local Card=makeCard("🧭 ESP Player","Aura + boîte + pseudo + distance (couleurs par rôle/équipe, MAJ live).",170)
 	local Toggle,setT=makeToggle(Card,false)
 
-	local Row=Instance.new("Frame"); Row.BackgroundTransparency=1; Row.Position=UDim2.fromOffset(12,56); Row.Size=UDim2.new(1,-24,0,28); Row.Parent=Card
-	local L=Instance.new("TextLabel"); L.BackgroundTransparency=1; L.Font=Enum.Font.Gotham; L.TextSize=14; L.TextXAlignment=Enum.TextXAlignment.Left; L.TextColor3=Color3.fromRGB(200,200,210)
-	L.Text="Afficher @username"; L.Position=UDim2.fromOffset(0,6); L.Size=UDim2.fromOffset(160,18); L.Parent=Row
-	local Small,setSmall=makeToggle(Row,S.espShowUsername); Small.Position=UDim2.new(1,-56,0,2); Small.Size=UDim2.fromOffset(56,24)
+	-- Row : single option @username
+	local Row=Instance.new("Frame"); Row.BackgroundTransparency=1; Row.Position=UDim2.fromOffset(14,56); Row.Size=UDim2.new(1,-28,0,28); Row.Parent=Card
+	local L=makeBadge("Option : Afficher @username"); L.Position=UDim2.fromOffset(0,6); L.Parent=Row
+	local Small,setSmall=makeToggle(Row,S.espShowUsername); Small.Position=UDim2.new(1,-58,0,2); Small.Size=UDim2.fromOffset(58,24)
 	Small.MouseButton1Click:Connect(function() S.espShowUsername=not S.espShowUsername; setSmall(S.espShowUsername) end)
 
 	Toggle.MouseButton1Click:Connect(function()
@@ -555,12 +664,11 @@ do
 	end)
 end
 
--- Hitbox (nouvelle carte)
+-- Hitbox
 do
-	local Card=makeCard("Hitbox (HRP)","Agrandit le HumanoidRootPart des AUTRES joueurs (client-side).",150)
+	local Card=makeCard("🎯 Hitbox (HRP)","Agrandit le HumanoidRootPart des autres joueurs (client-side).",150)
 	local Toggle,setT=makeToggle(Card,false)
 	makeSlider(Card,"Taille",2,30,S.hitboxSize,56,function(v) S.hitboxSize=v end)
-
 	Toggle.MouseButton1Click:Connect(function()
 		S.hitboxOn = not S.hitboxOn
 		setT(S.hitboxOn)
@@ -570,17 +678,17 @@ end
 
 -- TP Player
 do
-	local Card=makeCard("TP Player","Choisis un joueur puis clique TP.",220)
-	local row=Instance.new("Frame"); row.BackgroundTransparency=1; row.Position=UDim2.fromOffset(12,56); row.Size=UDim2.new(1,-24,0,36); row.Parent=Card
+	local Card=makeCard("🧭 TP Player","Choisis un joueur puis clique TP.",230)
+	local row=Instance.new("Frame"); row.BackgroundTransparency=1; row.Position=UDim2.fromOffset(14,58); row.Size=UDim2.new(1,-28,0,36); row.Parent=Card
 	local uiList=Instance.new("UIListLayout",row); uiList.FillDirection=Enum.FillDirection.Horizontal; uiList.Padding=UDim.new(0,8)
 
-	local refreshBtn=Instance.new("TextButton"); refreshBtn.Size=UDim2.new(0,100,1,0); refreshBtn.Text="Refresh"; refreshBtn.Font=Enum.Font.GothamSemibold; refreshBtn.TextSize=14; refreshBtn.TextColor3=Color3.fromRGB(255,255,255)
-	refreshBtn.BackgroundColor3=Color3.fromRGB(50,130,255); refreshBtn.AutoButtonColor=true; refreshBtn.Parent=row; do local c=Instance.new("UICorner",refreshBtn) c.CornerRadius=UDim.new(0,8) end
+	local refreshBtn=Instance.new("TextButton"); refreshBtn.Size=UDim2.new(0,104,1,0); refreshBtn.Text="Refresh"; refreshBtn.Font=Enum.Font.GothamSemibold; refreshBtn.TextSize=14; refreshBtn.TextColor3=Color3.fromRGB(255,255,255)
+	refreshBtn.BackgroundColor3=Color3.fromRGB(60,130,255); refreshBtn.AutoButtonColor=true; refreshBtn.Parent=row; do local c=Instance.new("UICorner",refreshBtn) c.CornerRadius=UDim.new(0,8) end
 
-	local dropdownBtn=Instance.new("TextButton"); dropdownBtn.Size=UDim2.new(1,-108,1,0); dropdownBtn.Text="Choisir un joueur  ▾"; dropdownBtn.Font=Enum.Font.Gotham; dropdownBtn.TextSize=14
-	dropdownBtn.TextColor3=Color3.fromRGB(235,235,240); dropdownBtn.BackgroundColor3=Color3.fromRGB(45,45,55); dropdownBtn.AutoButtonColor=true; dropdownBtn.Parent=row; do local c=Instance.new("UICorner",dropdownBtn) c.CornerRadius=UDim.new(0,8) end
+	local dropdownBtn=Instance.new("TextButton"); dropdownBtn.Size=UDim2.new(1,-112,1,0); dropdownBtn.Text="Choisir un joueur  ▾"; dropdownBtn.Font=Enum.Font.Gotham; dropdownBtn.TextSize=14
+	dropdownBtn.TextColor3=Color3.fromRGB(235,235,240); dropdownBtn.BackgroundColor3=Color3.fromRGB(48,50,65); dropdownBtn.AutoButtonColor=true; dropdownBtn.Parent=row; do local c=Instance.new("UICorner",dropdownBtn) c.CornerRadius=UDim.new(0,8) end
 
-	local listHolder=Instance.new("ScrollingFrame"); listHolder.Size=UDim2.new(1,-24,0,112); listHolder.Position=UDim2.fromOffset(12,100); listHolder.BackgroundColor3=Color3.fromRGB(40,40,48)
+	local listHolder=Instance.new("ScrollingFrame"); listHolder.Size=UDim2.new(1,-28,0,120); listHolder.Position=UDim2.fromOffset(14,100); listHolder.BackgroundColor3=Color3.fromRGB(40,42,56)
 	listHolder.BorderSizePixel=0; listHolder.ScrollBarThickness=6; listHolder.CanvasSize=UDim2.new(0,0,0,0); listHolder.Visible=false; listHolder.Parent=Card; do local c=Instance.new("UICorner",listHolder) c.CornerRadius=UDim.new(0,10) end
 	local listLayout=Instance.new("UIListLayout",listHolder); listLayout.Padding=UDim.new(0,6)
 	local listPad=Instance.new("UIPadding",listHolder); listPad.PaddingLeft=UDim.new(0,6); listPad.PaddingRight=UDim.new(0,6); listPad.PaddingTop=UDim.new(0,6); listPad.PaddingBottom=UDim.new(0,6)
@@ -588,10 +696,10 @@ do
 	local emptyLabel=Instance.new("TextLabel"); emptyLabel.Size=UDim2.new(1,-12,0,28); emptyLabel.BackgroundTransparency=1; emptyLabel.Text="Aucun autre joueur."
 	emptyLabel.Font=Enum.Font.Gotham; emptyLabel.TextSize=14; emptyLabel.TextColor3=Color3.fromRGB(200,200,205); emptyLabel.Visible=false; emptyLabel.Parent=listHolder
 
-	local tpBtn=Instance.new("TextButton"); tpBtn.Size=UDim2.new(1,-24,0,34); tpBtn.Position=UDim2.fromOffset(12,216-34); tpBtn.Text="Se TP → (choisis un joueur)"
-	tpBtn.Font=Enum.Font.GothamSemibold; tpBtn.TextSize=15; tpBtn.TextColor3=Color3.fromRGB(255,255,255); tpBtn.BackgroundColor3=Color3.fromRGB(80,80,90); tpBtn.AutoButtonColor=true; tpBtn.Parent=Card
+	local tpBtn=Instance.new("TextButton"); tpBtn.Size=UDim2.new(1,-28,0,36); tpBtn.Position=UDim2.fromOffset(14,230-36); tpBtn.Text="Se TP → (choisis un joueur)"
+	tpBtn.Font=Enum.Font.GothamSemibold; tpBtn.TextSize=15; tpBtn.TextColor3=Color3.fromRGB(255,255,255); tpBtn.BackgroundColor3=Color3.fromRGB(80,80,95); tpBtn.AutoButtonColor=true; tpBtn.Parent=Card
 	do local c=Instance.new("UICorner",tpBtn) c.CornerRadius=UDim.new(0,10) end
-	local function setTPEnabled(on) tpBtn.Active=on; tpBtn.AutoButtonColor=on; tpBtn.BackgroundColor3= on and Color3.fromRGB(60,120,255) or Color3.fromRGB(80,80,90) end
+	local function setTPEnabled(on) tpBtn.Active=on; tpBtn.AutoButtonColor=on; tpBtn.BackgroundColor3= on and Color3.fromRGB(60,120,255) or Color3.fromRGB(80,80,95) end
 	setTPEnabled(false)
 
 	local function clearList() for _,ch in ipairs(listHolder:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end; emptyLabel.Visible=false end
@@ -603,7 +711,7 @@ do
 			for _,p in ipairs(others) do
 				local b=Instance.new("TextButton"); b.Size=UDim2.new(1,-12,0,30); b.TextXAlignment=Enum.TextXAlignment.Left
 				b.Text=string.format("%s  (@%s)", (p.DisplayName~="" and p.DisplayName) or p.Name, p.Name)
-				b.Font=Enum.Font.Gotham; b.TextSize=14; b.TextColor3=Color3.fromRGB(235,235,240); b.BackgroundColor3=Color3.fromRGB(56,56,66); b.AutoButtonColor=true; b.Parent=listHolder
+				b.Font=Enum.Font.Gotham; b.TextSize=14; b.TextColor3=Color3.fromRGB(235,235,240); b.BackgroundColor3=Color3.fromRGB(56,58,72); b.AutoButtonColor=true; b.Parent=listHolder
 				Instance.new("UICorner",b).CornerRadius=UDim.new(0,8)
 				b.MouseButton1Click:Connect(function()
 					S.tpSelectedUserId=p.UserId; S.tpSelectedLabel=(p.DisplayName~="" and p.DisplayName) or p.Name
@@ -625,7 +733,7 @@ do
 end
 
 -- NoClip
-do local Card=makeCard("NoClip","Traverse les objets (réversible).",100); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("🧱 NoClip","Traverse les objets (réversible).",100); local Toggle,setT=makeToggle(Card,false)
 	Toggle.MouseButton1Click:Connect(function() S.noclipOn=not S.noclipOn; setT(S.noclipOn); if S.noclipOn then
 		local char=getChar(); S.noclipOriginal={}; for _,d in ipairs(char:GetDescendants()) do if d:IsA("BasePart") then S.noclipOriginal[d]=d.CanCollide end end
 		disconnect(S.noclipDesc); S.noclipDesc=char.DescendantAdded:Connect(function(inst) if inst:IsA("BasePart") then S.noclipOriginal[inst]=inst.CanCollide end end)
@@ -639,7 +747,7 @@ end
 LP.CharacterAdded:Connect(function() if S.noclipOn then noclip_enable() end end)
 
 -- Infinite Jump
-do local Card=makeCard("Infinite Jump","Saut infini (boost réglable).",150); local Toggle,setT=makeToggle(Card,false)
+do local Card=makeCard("🦘 Infinite Jump","Saut infini (boost réglable).",150); local Toggle,setT=makeToggle(Card,false)
 	makeSlider(Card,"Boost Y",20,120,S.ijBoost,56,function(v) S.ijBoost=v end)
 	local function ij_bind(char)
 		local hum=char:WaitForChild("Humanoid"); local root=char:WaitForChild("HumanoidRootPart")
@@ -685,4 +793,4 @@ UIS.InputBegan:Connect(function(io)
 	end
 end)
 
-print("[Premium Hub v3] prêt. Hitbox + ESP complet + Fly clean. Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
+print("[Premium Hub v4] ESP réparé (aura + box + pseudo + distance), UI VIP activée. Ouvre/ferme: \"$\" (⇧+4) • F2 • Insert • RightCtrl.")
