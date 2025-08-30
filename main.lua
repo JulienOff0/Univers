@@ -1,10 +1,6 @@
---[[  👑 Premium Hub v6.5 — one-file loader + hub (Solara-safe)
-     - wipe total au boot
-     - splash 7s, puis ouverture du hub
-     - pas de dépendance externe
-]]
+--[[  👑 Premium Hub v6.6 (splash 7s + hub complet)  ]]
 
------------------------- RESET DUR ------------------------
+-- ====== RESET dur (supprime anciens hubs/splash) ======
 pcall(function()
     local P = game:GetService("Players").LocalPlayer
     local roots = {}
@@ -13,37 +9,30 @@ pcall(function()
     if hui then table.insert(roots, hui) end
     if okCore and core then table.insert(roots, core) end
     if P and P:FindFirstChild("PlayerGui") then table.insert(roots, P.PlayerGui) end
-    local names = {"PremiumHubV65","PremiumHubV64","PremiumHubV63","PremiumHubV6","PremiumHubV4","PremiumHubV3","PremiumHUD","PH_Splash","PH_BOOT"}
+    local names = {"PremiumHubV66","PremiumHubV65","PremiumHubV64","PremiumHubV6","PremiumHubV4","PremiumHubV3","PremiumHUD","PH_Splash","PH_BOOT"}
     for _,root in ipairs(roots) do
-        if root then
-            for _,n in ipairs(names) do
-                pcall(function() if root:FindFirstChild(n) then root[n]:Destroy() end end)
-            end
+        for _,n in ipairs(names) do
+            pcall(function() if root:FindFirstChild(n) then root[n]:Destroy() end end)
         end
     end
 end)
 
------------------------- HELPERS ------------------------
+-- ====== Services & helpers ======
 local Players  = game:GetService("Players")
 local UIS      = game:GetService("UserInputService")
 local RS       = game:GetService("RunService")
 local TS       = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
 local Http     = game:GetService("HttpService")
-local StarterGui = game:GetService("StarterGui")
 local MPS      = game:GetService("MarketplaceService")
+local StarterGui = game:GetService("StarterGui")
 local LP       = Players.LocalPlayer
 
 local function best_parent()
-    if gethui then
-        local ok, gui = pcall(gethui)
-        if ok and gui then return gui end
-    end
-    local ok, core = pcall(function() return game:GetService("CoreGui") end)
-    if ok and core then return core end
-    return LP:WaitForChild("PlayerGui")
+    if gethui then local ok,g = pcall(gethui); if ok and g then return g end end
+    local okCore, core = pcall(function() return game:GetService("CoreGui") end)
+    return okCore and core or LP:WaitForChild("PlayerGui")
 end
-
 local function safe_parent(gui)
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
@@ -51,15 +40,15 @@ local function safe_parent(gui)
     pcall(function() if syn and syn.protect_gui then syn.protect_gui(gui) end end)
     gui.Parent = best_parent()
 end
+local function tween(o,t,props) return TS:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props) end
 
-local function tween(o,t,props)
-    return TS:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
-end
-
------------------------- SPLASH 7s ------------------------
+-- ====== Splash 7s ======
 local function showSplash7s(onClose)
-    local okBlur, blur = pcall(function() local b=Instance.new("BlurEffect"); b.Size=0; b.Name="PH_Blur"; b.Parent=Lighting; return b end)
-    if okBlur and blur then pcall(function() tween(blur,.25,{Size=18}):Play() end) end
+    local blur = Instance.new("BlurEffect")
+    blur.Size = 0
+    blur.Name = "PH_Blur"
+    blur.Parent = Lighting
+    tween(blur,.25,{Size=18}):Play()
 
     local G = Instance.new("ScreenGui")
     G.Name = "PH_BOOT"
@@ -72,7 +61,7 @@ local function showSplash7s(onClose)
     dim.Parent = G
 
     local panel = Instance.new("Frame")
-    panel.Size = UDim2.fromOffset(520,10) -- animé
+    panel.Size = UDim2.fromOffset(520,10)
     panel.AnchorPoint = Vector2.new(.5,.5)
     panel.Position = UDim2.fromScale(.5,.5)
     panel.BackgroundColor3 = Color3.fromRGB(24,26,32)
@@ -86,16 +75,6 @@ local function showSplash7s(onClose)
     banner.Position = UDim2.fromOffset(12,12)
     banner.Parent = panel
     Instance.new("UICorner",banner).CornerRadius = UDim.new(0,12)
-    pcall(function()
-        local grad = Instance.new("UIGradient", banner)
-        grad.Rotation = 18
-        grad.Color = ColorSequence.new(Color3.fromRGB(58,116,255), Color3.fromRGB(120,170,255))
-        grad.Transparency = NumberSequence.new{
-            NumberSequenceKeypoint.new(0,.15),
-            NumberSequenceKeypoint.new(.5,.25),
-            NumberSequenceKeypoint.new(1,.15)
-        }
-    end)
 
     local hello = Instance.new("TextLabel")
     hello.BackgroundTransparency = 1
@@ -108,15 +87,15 @@ local function showSplash7s(onClose)
     hello.Size = UDim2.fromOffset(460,28)
     hello.Parent = panel
 
-    local gameName = "le jeu"
-    pcall(function() gameName = MPS:GetProductInfo(game.PlaceId).Name end)
+    local gname = "le jeu"
+    pcall(function() gname = MPS:GetProductInfo(game.PlaceId).Name end)
     local sub = Instance.new("TextLabel")
     sub.BackgroundTransparency = 1
     sub.Font = Enum.Font.Gotham
     sub.TextSize = 14
     sub.TextColor3 = Color3.fromRGB(170,176,196)
     sub.TextXAlignment = Enum.TextXAlignment.Left
-    sub.Text = "Chargement du Premium Hub…  Jeu : "..gameName
+    sub.Text = "Chargement du Premium Hub…  Jeu : "..gname
     sub.Position = UDim2.fromOffset(24,110)
     sub.Size = UDim2.fromOffset(470,22)
     sub.Parent = panel
@@ -127,14 +106,14 @@ local function showSplash7s(onClose)
     tip.TextSize = 13
     tip.TextColor3 = Color3.fromRGB(170,176,196)
     tip.TextXAlignment = Enum.TextXAlignment.Left
-    tip.Text = 'Astuce : ensuite, ouvre/ferme l’UI avec "$" (⇧+4) • F2 • Insert • RightCtrl'
+    tip.Text = 'Astuce : ouvre/ferme l’UI avec "$" (⇧+4) • F2 • Insert • RightCtrl'
     tip.Position = UDim2.fromOffset(24,138)
     tip.Size = UDim2.fromOffset(470,22)
     tip.Parent = panel
 
     local spinner = Instance.new("ImageLabel")
     spinner.BackgroundTransparency = 1
-    spinner.Image = "rbxassetid://1095708" -- petit cercle
+    spinner.Image = "rbxassetid://1095708"
     spinner.ImageColor3 = Color3.fromRGB(120,170,255)
     spinner.AnchorPoint = Vector2.new(1,1)
     spinner.Position = UDim2.new(1,-18,1,-16)
@@ -143,36 +122,31 @@ local function showSplash7s(onClose)
 
     tween(panel,.25,{Size=UDim2.fromOffset(520,240)}):Play()
 
-    -- rotation
     local rot = 0
-    local rotConn
-    rotConn = RS.RenderStepped:Connect(function(dt)
+    local rotConn = RS.RenderStepped:Connect(function(dt)
         rot = (rot + dt*360) % 360
         spinner.Rotation = rot
     end)
 
     task.delay(7, function()
-        pcall(function() tween(panel,.2,{Size=UDim2.fromOffset(520,10)}):Play() end)
-        pcall(function() tween(dim,.2,{BackgroundTransparency=1}):Play() end)
+        tween(panel,.2,{Size=UDim2.fromOffset(520,10)}):Play()
+        tween(dim,.2,{BackgroundTransparency=1}):Play()
         task.delay(.22, function()
-            pcall(function() if rotConn then rotConn:Disconnect() end end)
-            pcall(function() if okBlur and blur then tween(blur,.2,{Size=0}):Play(); task.delay(.22,function() pcall(function() blur:Destroy() end) end) end end)
+            pcall(function() rotConn:Disconnect() end)
+            tween(blur,.2,{Size=0}):Play()
+            task.delay(.22,function() pcall(function() blur:Destroy() end) end)
             pcall(function() G:Destroy() end)
             if onClose then onClose() end
         end)
     end)
 end
 
-----------------------------------------------------------------
---                       LE HUB COMPLET                       --
-----------------------------------------------------------------
+-- ====== HUB ======
 local function StartHub()
-    -- tout le hub v6.5 (optimisé) — pseudo + distance + aura + boîte + couleurs rôle/équipe
-    if _G.__PH_RUNNING_65 then return end
-    _G.__PH_RUNNING_65 = true
+    if _G.__PH_RUNNING_66 then return end
+    _G.__PH_RUNNING_66 = true
 
-    -- === THEME/STATE/SAVE ===
-    local Http = game:GetService("HttpService")
+    -- ---------- état/sauvegarde ----------
     local function getChar() return LP.Character or LP.CharacterAdded:Wait() end
     local function getHum()  return (getChar()):WaitForChild("Humanoid") end
     local function disconnect(c) if c then pcall(function() c:Disconnect() end) end
@@ -183,48 +157,35 @@ local function StartHub()
     FS.file = ("%s/settings_%d.json"):format(FS.dir, game.PlaceId)
     local function saveTable(t)
         local ok, data = pcall(function() return Http:JSONEncode(t) end)
-        if not ok then return false end
+        if not ok then return end
         if FS.ok then
             pcall(function() if not isfolder(FS.dir) then makefolder(FS.dir) end end)
-            local wrote = pcall(function() writefile(FS.file, data) end)
-            if wrote then return true end
+            pcall(function() writefile(FS.file, data) end)
+        else
+            shared.__PH_SAVE = data
         end
-        shared.__PH_SAVE = data
-        return true
     end
     local function loadTable()
         local raw
-        if FS.ok and isfile(FS.file) then
-            raw = (function() local ok,d=pcall(function() return readfile(FS.file) end); if ok then return d end end)()
-        elseif shared.__PH_SAVE then raw = shared.__PH_SAVE end
+        if FS.ok and isfile(FS.file) then raw = pcall(function() return readfile(FS.file) end) and readfile(FS.file) or nil
+        else raw = shared.__PH_SAVE end
         if raw then local ok,tab=pcall(function() return Http:JSONDecode(raw) end); if ok and type(tab)=="table" then return tab end end
         return {}
     end
 
     local S = {
-        uiVisible=true, hudOn=true,
-        theme="dark", accent="blue", scale=1.0, opacity=1.0, windowPos=nil,
+        -- ui
+        theme="dark", accent="blue", scale=1.0, opacity=1.0, uiVisible=true, hudOn=true, windowPos=nil,
+        key_UI={"Shift","4"}, key_Panic={"RightAlt"}, key_ESP={"F3"}, key_Fly={"F4"}, key_Clip={"F5"},
 
-        key_UI   = {"Shift","4"},
-        key_Panic= {"RightAlt"},
-        key_ESP  = {"F3"},
-        key_Fly  = {"F4"},
-        key_Clip = {"F5"},
-
+        -- features
         speedOn=false, speed=22, minSpeed=16, maxSpeed=120, speedCon={hb=nil,prop=nil}, humanoid=nil, normalSpeed=nil,
-
         flyOn=false, flyConns={}, flyAlive=false, flyData=nil,
-
         lightOn=false, lightBackup=nil,
-
         espOn=false, espConn=nil, espHz=12, espShowUsername=true, espMaxDist=6000,
-
         hitboxOn=false, hitboxSize=10, hitboxConn=nil, hitboxOrig={},
-
         tpSelectedUserId=nil, tpSelectedLabel=nil,
-
         noclipOn=false, noclipStep=nil, noclipDesc=nil, noclipOriginal={},
-
         ijOn=false, ijBoost=55, ijConn=nil,
     }
     do local loaded=loadTable(); for k,v in pairs(loaded) do if S[k]~=nil then S[k]=v end end end
@@ -244,8 +205,8 @@ local function StartHub()
     local function ACCA() return ACCENTS[S.accent][1] end
     local function ACCB() return ACCENTS[S.accent][2] end
 
-    -- === UI root ===
-    local UI  = Instance.new("ScreenGui"); UI.Name="PremiumHubV65"; safe_parent(UI); UI.Enabled=false
+    -- ---------- UI root ----------
+    local UI  = Instance.new("ScreenGui"); UI.Name="PremiumHubV66"; safe_parent(UI); UI.Enabled=false
     local HUD = Instance.new("ScreenGui"); HUD.Name="PremiumHUD";   safe_parent(HUD); HUD.Enabled=S.hudOn
 
     local ALPHA={} local function regA(n) table.insert(ALPHA, n) end
@@ -274,10 +235,9 @@ local function StartHub()
     local Header=Instance.new("Frame"); Header.Size=UDim2.new(1,0,0,70); Header.BackgroundColor3=TH().top; Header.BorderSizePixel=0; Header.Active=true; Header.Parent=Main
     Instance.new("UICorner",Header).CornerRadius=UDim.new(0,18); regA(Header)
     local banner=Instance.new("Frame"); banner.BackgroundTransparency=.12; banner.Size=UDim2.new(1,-32,0,70); banner.Position=UDim2.fromOffset(16,0); banner.Parent=Header
-    pcall(function() local g=Instance.new("UIGradient",banner); g.Rotation=20; g.Color=ColorSequence.new(ACCA(),ACCB()) end)
     local Title=Instance.new("TextLabel"); Title.BackgroundTransparency=1; Title.Position=UDim2.fromOffset(18,12); Title.Size=UDim2.fromOffset(460,44)
     Title.Font=Enum.Font.GothamBlack; Title.TextSize=24; Title.TextXAlignment=Enum.TextXAlignment.Left; Title.TextColor3=TH().text
-    Title.Text="👑 Premium Hub v6.5 — VIP"; Title.Parent=Header
+    Title.Text="👑 Premium Hub v6.6 — VIP"; Title.Parent=Header
     local Hint=Instance.new("TextLabel"); Hint.BackgroundTransparency=1; Hint.AnchorPoint=Vector2.new(1,0); Hint.Position=UDim2.new(1,-56,0,24)
     Hint.Size=UDim2.fromOffset(360,24); Hint.Font=Enum.Font.Gotham; Hint.TextSize=14; Hint.TextXAlignment=Enum.TextXAlignment.Right; Hint.TextColor3=TH().muted
     Hint.Text='Hide: "$"(⇧+4) • F2 • Insert • RightCtrl'; Hint.Parent=Header
@@ -292,7 +252,7 @@ local function StartHub()
     local function quick(txt,w,cb)
         local b=Instance.new("TextButton"); b.Size=UDim2.fromOffset(w,30); b.Text=txt; b.Font=Enum.Font.GothamSemibold; b.TextSize=14; b.TextColor3=TH().text
         b.BackgroundColor3=TH().neutral; b.AutoButtonColor=false; b.Parent=Quick; Instance.new("UICorner",b).CornerRadius=UDim.new(0,8); regA(b)
-        glow(b, ACCA(), TH().neutral); b.MouseButton1Click:Connect(cb); return b
+        glow(b, Color3.fromRGB(80,110,240), TH().neutral); b.MouseButton1Click:Connect(cb)
     end
 
     local Content=Instance.new("ScrollingFrame"); Content.Position=UDim2.fromOffset(16,126); Content.Size=UDim2.new(1,-32,1,-142)
@@ -308,7 +268,7 @@ local function StartHub()
     local function refreshHUD() HudText.Text=string.format("Speed:%s  Fly:%s  ESP:%s  Clip:%s", S.speedOn and "on" or "off", S.flyOn and "on" or "off", S.espOn and "on" or "off", S.noclipOn and "on" or "off") end
     refreshHUD()
 
-    -- === UI helpers (section, toggle, slider) ===
+    -- ---------- UI components ----------
     local function section(title,subtitle)
         local Card=Instance.new("Frame"); Card.Size=UDim2.new(1,0,0,0); Card.AutomaticSize=Enum.AutomaticSize.Y; Card.BackgroundColor3=TH().card; Card.BorderSizePixel=0; Card.Active=true; Card.Parent=Content
         Instance.new("UICorner",Card).CornerRadius=UDim.new(0,14); regA(Card)
@@ -326,9 +286,9 @@ local function StartHub()
         local Row=Instance.new("Frame"); Row.BackgroundTransparency=1; Row.Size=UDim2.new(1,0,0,34); Row.Parent=parent
         local L=Instance.new("TextLabel"); L.BackgroundTransparency=1; L.Font=Enum.Font.Gotham; L.TextSize=14; L.TextXAlignment=Enum.TextXAlignment.Left; L.TextColor3=TH().text; L.Text=label; L.Position=UDim2.fromOffset(0,8); L.Size=UDim2.fromOffset(360,18); L.Parent=Row
         local Btn=Instance.new("TextButton"); Btn.AutoButtonColor=false; Btn.AnchorPoint=Vector2.new(1,0); Btn.Position=UDim2.new(1,-2,0,4)
-        Btn.Size=UDim2.fromOffset(74,26); Btn.BackgroundColor3= default and ACCA() or TH().neutral; Btn.Text=""; Btn.Parent=Row; Instance.new("UICorner",Btn).CornerRadius=UDim.new(1,0); regA(Btn)
+        Btn.Size=UDim2.fromOffset(74,26); Btn.BackgroundColor3= default and Color3.fromRGB(58,116,255) or TH().neutral; Btn.Text=""; Btn.Parent=Row; Instance.new("UICorner",Btn).CornerRadius=UDim.new(1,0); regA(Btn)
         local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(24,24); Knob.Position= default and UDim2.fromOffset(48,1) or UDim2.fromOffset(2,1); Knob.BackgroundColor3=TH().top; Knob.Parent=Btn; Instance.new("UICorner",Knob).CornerRadius=UDim.new(1,0); regA(Knob)
-        local function setOn(on) tween(Btn,.16,{BackgroundColor3= on and ACCA() or TH().neutral}):Play(); tween(Knob,.16,{Position= on and UDim2.fromOffset(48,1) or UDim2.fromOffset(2,1)}):Play() end
+        local function setOn(on) tween(Btn,.16,{BackgroundColor3= on and Color3.fromRGB(58,116,255) or TH().neutral}):Play(); tween(Knob,.16,{Position= on and UDim2.fromOffset(48,1) or UDim2.fromOffset(2,1)}):Play() end
         return setOn, Btn
     end
     local function slider(parent,label,minV,maxV,defaultV,fmt)
@@ -337,8 +297,7 @@ local function StartHub()
         local function format(v) return fmt and fmt(v) or tostring(v) end
         T.Text=string.format("%s: %s",label,format(defaultV)); T.Position=UDim2.fromOffset(0,2); T.Size=UDim2.fromOffset(380,18); T.Parent=Row
         local Track=Instance.new("Frame"); Track.BackgroundColor3=TH().bar; Track.BorderSizePixel=0; Track.Position=UDim2.fromOffset(0,28); Track.Size=UDim2.new(1,-2,0,10); Track.Parent=Row; Instance.new("UICorner",Track).CornerRadius=UDim.new(0,6); regA(Track)
-        local Fill=Instance.new("Frame"); Fill.BackgroundColor3=ACCA(); Fill.BorderSizePixel=0; Fill.Size=UDim2.fromOffset(0,10); Fill.Parent=Track; Instance.new("UICorner",Fill).CornerRadius=UDim.new(0,6)
-        pcall(function() local grad=Instance.new("UIGradient",Fill); grad.Rotation=15; grad.Color=ColorSequence.new(ACCA(), ACCB()) end)
+        local Fill=Instance.new("Frame"); Fill.BackgroundColor3=Color3.fromRGB(58,116,255); Fill.BorderSizePixel=0; Fill.Size=UDim2.fromOffset(0,10); Fill.Parent=Track; Instance.new("UICorner",Fill).CornerRadius=UDim.new(0,6)
         local Knob=Instance.new("Frame"); Knob.Size=UDim2.fromOffset(16,16); Knob.Position=UDim2.fromOffset(-8,-3); Knob.BackgroundColor3=TH().top; Knob.Parent=Fill; Instance.new("UICorner",Knob).CornerRadius=UDim.new(1,0); regA(Knob)
         local dragging=false; local current=defaultV
         local function setFromX(px)
@@ -356,7 +315,7 @@ local function StartHub()
         return function() return current end
     end
 
-    -- === SPEED ===
+    -- ---------- Speed ----------
     local function speed_enable()
         S.humanoid = getHum()
         S.normalSpeed = S.humanoid.WalkSpeed
@@ -378,7 +337,7 @@ local function StartHub()
     end
     LP.CharacterAdded:Connect(function() if S.speedOn then task.wait(.3); speed_enable() end end)
 
-    -- === FLY (sortie propre) ===
+    -- ---------- Fly (sortie propre) ----------
     local function fly_disable()
         S.flyAlive=false; disconnectAll(S.flyConns)
         if not S.flyData then return end
@@ -390,7 +349,6 @@ local function StartHub()
         if Controls then pcall(function() Controls:Enable() end) end
         if hum then
             hum.AutoRotate=true; hum.PlatformStand=false; hum.Sit=false
-            pcall(function() hum:ChangeState(Enum.HumanoidStateType.Landed) end)
             pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
             task.delay(0.05,function() if hum and hum.Parent then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end) end end)
         end
@@ -410,7 +368,6 @@ local function StartHub()
         S.flyData={hrp=hrp,humanoid=hum,lv=lv,att=att,Controls=Controls,collMap=collMap}
         table.insert(S.flyConns, hum:GetPropertyChangedSignal("PlatformStand"):Connect(function() if S.flyAlive and hum.PlatformStand~=true then hum.PlatformStand=true end end))
         table.insert(S.flyConns, RS.Stepped:Connect(function() if S.flyAlive then hrp.AssemblyAngularVelocity=Vector3.zero end end))
-        task.spawn(function() while S.flyAlive and char.Parent do if hum.AutoRotate~=false then hum.AutoRotate=false end if not att.Parent then att.Parent=hrp end if not lv.Parent then lv.Parent=hrp end task.wait(0.05) end end)
         table.insert(S.flyConns, RS.RenderStepped:Connect(function()
             if not S.flyAlive then return end
             local cam=workspace.CurrentCamera; if not cam then return end
@@ -431,21 +388,20 @@ local function StartHub()
         table.insert(S.flyConns, hum.Died:Connect(fly_disable))
     end
 
-    -- === LIGHT ===
+    -- ---------- Light ----------
     local LIGHT_PRESET={GlobalShadows=false, FogEnd=100000, Brightness=2, Ambient=Color3.fromRGB(150,150,150)}
     local function light_enable() if not S.lightBackup then S.lightBackup={GlobalShadows=Lighting.GlobalShadows, FogEnd=Lighting.FogEnd, Brightness=Lighting.Brightness, Ambient=Lighting.Ambient} end
-    Lighting.GlobalShadows=LIGHT_PRESET.GlobalShadows; Lighting.FogEnd=LIGHT_PRESET.FogEnd; Lighting.Brightness=LIGHT_PRESET.Brightness; Lighting.Ambient=LIGHT_PRESET.Ambient end
+        Lighting.GlobalShadows=LIGHT_PRESET.GlobalShadows; Lighting.FogEnd=LIGHT_PRESET.FogEnd; Lighting.Brightness=LIGHT_PRESET.Brightness; Lighting.Ambient=LIGHT_PRESET.Ambient end
     local function light_disable() if S.lightBackup then Lighting.GlobalShadows=S.lightBackup.GlobalShadows; Lighting.FogEnd=S.lightBackup.FogEnd; Lighting.Brightness=S.lightBackup.Brightness; Lighting.Ambient=S.lightBackup.Ambient end end
 
-    -- === ESP (aura + box + name + distance) ===
+    -- ---------- ESP ----------
     local ROLE_COLORS={Murder=Color3.fromRGB(255,60,60),Murderer=Color3.fromRGB(255,60,60),Innocent=Color3.fromRGB(64,128,255),Sheriff=Color3.fromRGB(255,220,0),Detective=Color3.fromRGB(255,220,0)}
     local DEFAULT_COLOR=Color3.fromRGB(200,200,200)
     local function getRole(p,char) local r=p:GetAttribute("Role"); if r==nil and char then r=char:GetAttribute("Role") end; return (typeof(r)=="string") and r or nil end
     local function colorFor(p,char) local role=getRole(p,char); if role and ROLE_COLORS[role] then return ROLE_COLORS[role] end; if p.Team and p.Team.TeamColor then return p.Team.TeamColor.Color end; return DEFAULT_COLOR end
     local function headOrPart(char) return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart") end
     local function sameColor(a,b) return a and b and a.r==b.r and a.g==b.g and a.b==b.b end
-
-    local ESP_REG={} -- [Player]={char,hl,box,bb,nameLbl,distLbl,lastName,lastDist,lastColor,conns={}}
+    local ESP_REG={}
     local function buildESPFor(p,char)
         if not char or p==LP then return end
         local reg=ESP_REG[p]; if not reg then reg={conns={}}; ESP_REG[p]=reg else disconnectAll(reg.conns) end
@@ -479,7 +435,7 @@ local function StartHub()
                         if dist > S.espMaxDist then reg.bb.Enabled=false; reg.hl.Enabled=false; reg.box.Visible=false
                         else
                             local col=colorFor(p,char)
-                            if not sameColor(reg.lastColor,col) then reg.lastColor=col; reg.hl.OutlineColor=col; pcall(function() reg.box.LineColor3=col end); pcall(function() reg.box.Color3=col end); reg.nameLbl.TextColor3=col; reg.distLbl.TextColor3=col end
+                            if not sameColor(reg.lastColor,col) then reg.lastColor=col; reg.hl.OutlineColor=col; pcall(function() reg.box.LineColor3=col end); reg.nameLbl.TextColor3=col; reg.distLbl.TextColor3=col end
                             local display=(p.DisplayName and p.DisplayName~="") and p.DisplayName or p.Name
                             local wantName=S.espShowUsername and (display.." (@"..p.Name..")") or display
                             if reg.lastName~=wantName then reg.nameLbl.Text=wantName; reg.lastName=wantName end
@@ -501,7 +457,7 @@ local function StartHub()
     end
     local function esp_disable() disconnect(S.espConn); S.espConn=nil; for _,reg in pairs(ESP_REG) do if reg.bb then reg.bb.Enabled=false end; if reg.hl then reg.hl.Enabled=false end; if reg.box then reg.box.Visible=false end end end
 
-    -- === HITBOX ===
+    -- ---------- Hitbox ----------
     local function rememberHRP(hrp) if not hrp or S.hitboxOrig[hrp] then return end S.hitboxOrig[hrp]={Size=hrp.Size,Transparency=hrp.Transparency,Material=hrp.Material,CanCollide=hrp.CanCollide,BrickColor=hrp.BrickColor} end
     local function applyHitboxTo(hrp) if not hrp then return end rememberHRP(hrp); hrp.Size=Vector3.new(S.hitboxSize,S.hitboxSize,S.hitboxSize); hrp.Transparency=.7; hrp.BrickColor=BrickColor.new("Really red"); hrp.Material=Enum.Material.Neon; hrp.CanCollide=false end
     local function restoreAllHitbox() for hrp,orig in pairs(S.hitboxOrig) do if hrp and hrp.Parent and orig then pcall(function() hrp.Size=orig.Size; hrp.Transparency=orig.Transparency; hrp.Material=orig.Material; hrp.CanCollide=orig.CanCollide; hrp.BrickColor=orig.BrickColor end) end end S.hitboxOrig={} end
@@ -509,7 +465,7 @@ local function StartHub()
     local function hitbox_enable() if S.hitboxConn then return end; hitbox_loop(); S.hitboxConn=RS.RenderStepped:Connect(function() if S.hitboxOn then hitbox_loop() end end); Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(function(c) task.wait(.1); local hrp=c:FindFirstChild("HumanoidRootPart"); if hrp then rememberHRP(hrp) end end) end) end
     local function hitbox_disable() disconnect(S.hitboxConn); S.hitboxConn=nil; restoreAllHitbox() end
 
-    -- === NOCLIP ===
+    -- ---------- NoClip ----------
     local function noclip_cachePart(inst) if inst:IsA("BasePart") and S.noclipOriginal[inst]==nil then S.noclipOriginal[inst]=inst.CanCollide end end
     local function noclip_cacheChar(char) for _,d in ipairs(char:GetDescendants()) do noclip_cachePart(d) end; disconnect(S.noclipDesc); S.noclipDesc=char.DescendantAdded:Connect(noclip_cachePart) end
     local function noclip_apply(char) for part,_ in pairs(S.noclipOriginal) do if part.Parent and part:IsDescendantOf(char) then part.CanCollide=false end end end
@@ -517,11 +473,11 @@ local function StartHub()
     local function noclip_disable() disconnect(S.noclipStep); S.noclipStep=nil; disconnect(S.noclipDesc); S.noclipDesc=nil; for part,can in pairs(S.noclipOriginal) do if part and part.Parent then part.CanCollide=can end end; S.noclipOriginal={} end
     LP.CharacterAdded:Connect(function(c) if S.noclipOn then noclip_enable() end end)
 
-    -- === INFINITE JUMP ===
+    -- ---------- Infinite Jump ----------
     local function ij_bind(char)
         local hum=char:WaitForChild("Humanoid"); local root=char:WaitForChild("HumanoidRootPart")
         hum.UseJumpPower=true
-        disconnect(S.ijConn)
+        if S.ijConn then S.ijConn:Disconnect() end
         S.ijConn=UIS.JumpRequest:Connect(function()
             if not S.ijOn then return end
             if hum.Health<=0 or hum:GetState()==Enum.HumanoidStateType.Dead then return end
@@ -533,12 +489,12 @@ local function StartHub()
     if LP.Character then ij_bind(LP.Character) end
     LP.CharacterAdded:Connect(function(c) if S.ijOn then ij_bind(c) end end)
 
-    -- === TP ===
+    -- ---------- TP ----------
     local function getHRPFromChar(char) return char and char:FindFirstChild("HumanoidRootPart") end
     local function tpToPlayerId(userId) local me=LP; local target=Players:GetPlayerByUserId(userId); if not (me and me.Character and target and target.Character) then return end; local myHRP=getHRPFromChar(me.Character); local targetHRP=getHRPFromChar(target.Character); if not (myHRP and targetHRP) then return end; me.Character:PivotTo(targetHRP.CFrame * CFrame.new(0,0,3)) end
     local function listOthers() local arr={}; for _,p in ipairs(Players:GetPlayers()) do if p~=LP then table.insert(arr,p) end end; table.sort(arr,function(a,b) local ad=(a.DisplayName~="" and a.DisplayName) or a.Name; local bd=(b.DisplayName~="" and b.DisplayName) or b.Name; return string.lower(ad) < string.lower(bd) end); return arr end
 
-    -- === Sections UI ===
+    -- ---------- Sections ----------
     local function bindUI(parent,label,keys,apply)
         local Row=Instance.new("Frame"); Row.BackgroundTransparency=1; Row.Size=UDim2.new(1,0,0,38); Row.Parent=parent
         local Lb=Instance.new("TextLabel"); Lb.BackgroundTransparency=1; Lb.Font=Enum.Font.Gotham; Lb.TextSize=14; Lb.TextXAlignment=Enum.TextXAlignment.Left; Lb.TextColor3=TH().text; Lb.Text=label; Lb.Position=UDim2.fromOffset(0,8); Lb.Size=UDim2.fromOffset(240,18); Lb.Parent=Row
@@ -625,17 +581,18 @@ local function StartHub()
         local Card,Body=section("🧭 TP Player","Choisis un joueur puis clique TP.")
         local row=Instance.new("Frame"); row.BackgroundTransparency=1; row.Size=UDim2.new(1,0,0,36); row.Parent=Body
         local ddBtn=Instance.new("TextButton"); ddBtn.Size=UDim2.new(1,-118,1,0); ddBtn.Text="Choisir un joueur  ▾"; ddBtn.Font=Enum.Font.Gotham; ddBtn.TextSize=14; ddBtn.TextColor3=TH().text; ddBtn.BackgroundColor3=TH().bar; ddBtn.AutoButtonColor=true; ddBtn.Parent=row; Instance.new("UICorner",ddBtn).CornerRadius=UDim.new(0,8); regA(ddBtn)
-        local refreshBtn=Instance.new("TextButton"); refreshBtn.Size=UDim2.new(0,110,1,0); refreshBtn.Text="Refresh"; refreshBtn.Font=Enum.Font.GothamSemibold; refreshBtn.TextSize=14; refreshBtn.TextColor3=TH().text; refreshBtn.BackgroundColor3=ACCA(); refreshBtn.Parent=row; Instance.new("UICorner",refreshBtn).CornerRadius=UDim.new(0,8)
+        local refreshBtn=Instance.new("TextButton"); refreshBtn.Size=UDim2.new(0,110,1,0); refreshBtn.Text="Refresh"; refreshBtn.Font=Enum.Font.GothamSemibold; refreshBtn.TextSize=14; refreshBtn.TextColor3=TH().text; refreshBtn.BackgroundColor3=Color3.fromRGB(58,116,255); refreshBtn.Parent=row; Instance.new("UICorner",refreshBtn).CornerRadius=UDim.new(0,8)
         local listHolder=Instance.new("ScrollingFrame"); listHolder.Size=UDim2.new(1,0,0,120); listHolder.BackgroundColor3=TH().top; listHolder.BorderSizePixel=0; listHolder.ScrollBarThickness=6; listHolder.CanvasSize=UDim2.new(0,0,0,0); listHolder.Visible=false; listHolder.Parent=Body
         Instance.new("UICorner",listHolder).CornerRadius=UDim.new(0,10); regA(listHolder)
         local listLayout=Instance.new("UIListLayout",listHolder); listLayout.Padding=UDim.new(0,6)
         local pad=Instance.new("UIPadding",listHolder); pad.PaddingLeft=UDim.new(0,6); pad.PaddingRight=UDim.new(0,6); pad.PaddingTop=UDim.new(0,6); pad.PaddingBottom=UDim.new(0,6)
         local empty=Instance.new("TextLabel"); empty.Size=UDim2.new(1,-12,0,28); empty.BackgroundTransparency=1; empty.Text="Aucun autre joueur."; empty.Font=Enum.Font.Gotham; empty.TextSize=14; empty.TextColor3=TH().muted; empty.Visible=false; empty.Parent=listHolder
         local tpBtn=Instance.new("TextButton"); tpBtn.Size=UDim2.new(1,0,0,36); tpBtn.Text="Se TP → (choisis un joueur)"; tpBtn.Font=Enum.Font.GothamSemibold; tpBtn.TextSize=15; tpBtn.TextColor3=TH().text; tpBtn.BackgroundColor3=Color3.fromRGB(80,80,95); tpBtn.Parent=Body; Instance.new("UICorner",tpBtn).CornerRadius=UDim.new(0,10)
-        local function setTPEnabled(on) tpBtn.Active=on; tpBtn.AutoButtonColor=on; tween(tpBtn,.15,{BackgroundColor3= on and ACCA() or Color3.fromRGB(80,80,95)}):Play() end
+        local function setTPEnabled(on) tpBtn.Active=on; tpBtn.AutoButtonColor=on; tween(tpBtn,.15,{BackgroundColor3= on and Color3.fromRGB(58,116,255) or Color3.fromRGB(80,80,95)}):Play() end
         setTPEnabled(false)
         local function clearList() for _,ch in ipairs(listHolder:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end; empty.Visible=false end
         local function resizeCanvas() local total=0; for _,ch in ipairs(listHolder:GetChildren()) do if ch:IsA("TextButton") then total += ch.AbsoluteSize.Y + listLayout.Padding.Offset end end; listHolder.CanvasSize=UDim2.new(0,0,0, math.max(total,0)) end
+        local function listOthers() local arr={}; for _,p in ipairs(Players:GetPlayers()) do if p~=LP then table.insert(arr,p) end end; table.sort(arr,function(a,b) local ad=(a.DisplayName~="" and a.DisplayName) or a.Name; local bd=(b.DisplayName~="" and b.DisplayName) or b.Name; return string.lower(ad) < string.lower(bd) end); return arr end
         local function rebuild()
             clearList()
             local others=listOthers()
@@ -669,10 +626,10 @@ local function StartHub()
         local setT,btn=toggle(Body,"Activer Infinite Jump",S.ijOn)
         local g=slider(Body,"Boost Y",20,120,S.ijBoost,function(v) return v end)
         RS.Heartbeat:Connect(function() S.ijBoost=g() end)
-        btn.MouseButton1Click:Connect(function() S.ijOn=not S.ijOn; setT(S.ijOn); if S.ijOn then if LP.Character then ij_bind(LP.Character) end else disconnect(S.ijConn); S.ijConn=nil end end)
+        btn.MouseButton1Click:Connect(function() S.ijOn=not S.ijOn; setT(S.ijOn); if S.ijOn then if LP.Character then ij_bind(LP.Character) end else if S.ijConn then S.ijConn:Disconnect(); S.ijConn=nil end end end)
     end
 
-    -- === Quick bar actions ===
+    -- ---------- Quick bar ----------
     local function saveNow()
         local pos=Main.AbsolutePosition; S.windowPos={x=pos.X,y=pos.Y}
         local dump={} for k,v in pairs(S) do local t=typeof(v); if t=="boolean" or t=="number" or t=="string" or t=="table" then dump[k]=v end end
@@ -686,7 +643,7 @@ local function StartHub()
         if S.espOn then S.espOn=false; esp_disable() end
         if S.hitboxOn then S.hitboxOn=false; hitbox_disable() end
         if S.noclipOn then S.noclipOn=false; noclip_disable() end
-        if S.ijOn then S.ijOn=false; disconnect(S.ijConn); S.ijConn=nil end
+        if S.ijOn then S.ijOn=false; if S.ijConn then S.ijConn:Disconnect(); S.ijConn=nil end end
         refreshHUD()
     end
     quick("💾 Save",82,saveNow)
@@ -695,7 +652,7 @@ local function StartHub()
     quick("📌 Reset Pos",98,function() local vs=workspace.CurrentCamera.ViewportSize; Main.Position=UDim2.fromOffset(math.floor(vs.X/2-Main.Size.X.Offset/2), math.floor(vs.Y/2-Main.Size.Y.Offset/2)); S.windowPos=nil end)
     quick("👁 HUD",70,function() S.hudOn=not S.hudOn; HUD.Enabled=S.hudOn end)
 
-    -- Drag + hides
+    -- ---------- Drag + hotkeys ----------
     local function clampToScreen(x,y) local vs=workspace.CurrentCamera.ViewportSize; local w,h=Main.AbsoluteSize.X,Main.AbsoluteSize.Y; return math.clamp(x,0,math.max(0,vs.X-w)), math.clamp(y,0,math.max(0,vs.Y-h)) end
     local dragging,offset
     local function beginDrag(io) dragging=true; local p=Main.AbsolutePosition; offset=Vector2.new(io.Position.X-p.X, io.Position.Y-p.Y) end
@@ -747,8 +704,8 @@ local function StartHub()
     HUD.Enabled=S.hudOn
     applyOpacity()
     refreshHUD()
-    pcall(function() StarterGui:SetCore("SendNotification",{Title="Premium Hub", Text="v6.5 chargé.", Duration=2}) end)
+    pcall(function() StarterGui:SetCore("SendNotification",{Title="Premium Hub", Text="v6.6 chargé.", Duration=2}) end)
 end
 
------------------------- GO ------------------------
+-- ====== Lancement : splash puis hub ======
 showSplash7s(StartHub)
